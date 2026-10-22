@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TikTok Tools</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="../shared/settings.js" defer></script>
+  <script src="../shared/messages.js" defer></script>
+  <script src="../shared/validation.js" defer></script>
+  <script src="../shared/equalizer.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <img class="logo" src="../assets/icons/icon-48.png" srcset="../assets/icons/icon-128.png 2x" width="34" height="34" alt="" aria-hidden="true">
+    <div class="titles">
+      <h1>TikTok Tools</h1>
+      <p id="connection" class="connection" role="status" aria-live="polite">Đang kết nối với tab TikTok…</p>
+    </div>
+    <button id="theme" class="icon" type="button" aria-label="Chuyển giao diện sáng/tối" aria-pressed="false">
+      <span aria-hidden="true">☀</span>
+    </button>
+  </header>
+
+  <main>
+    <section class="card" aria-labelledby="features-heading">
+      <div class="card-head">
+        <h2 id="features-heading">FEATURES</h2>
+        <span id="video-chip" class="chip">Chưa có video</span>
+      </div>
+      <button id="mirror" class="action primary" type="button" aria-pressed="false" disabled>Lật video đang xem</button>
+      <label class="row">
+        <span><strong>Tự lật mọi video</strong><small>Áp dụng cả khi cuộn sang video mới</small></span>
+        <input id="auto-mirror" type="checkbox" role="switch" aria-label="Tự lật mọi video" disabled>
+      </label>
+      <label class="row">
+        <span><strong>Phát nền</strong><small id="background-note">Tiếp tục phát khi chuyển tab</small></span>
+        <input id="background-play" type="checkbox" role="switch" aria-label="Phát nền" disabled>
+      </label>
+      <label class="row">
+        <span><strong>Ẩn thông tin trên video</strong><small>Caption, tác giả, thanh tiến trình</small></span>
+        <input id="clean-mode" type="checkbox" role="switch" aria-label="Ẩn thông tin trên video" disabled>
+      </label>
+      <label class="row">
+        <span><strong>Hiện nút trên TikTok</strong><small>Thao tác nhanh ngay trên trang</small></span>
+        <input id="floating-button" type="checkbox" role="switch" aria-label="Hiện nút trên TikTok" disabled>
+      </label>
+    </section>
+
+    <section class="card" aria-labelledby="playback-heading">
+      <div class="card-head"><h2 id="playback-heading">PLAYBACK</h2></div>
+      <div class="rate-head">
+        <label for="rate">Tốc độ</label>
+        <output id="rate-value" for="rate">1×</output>
+      </div>
+      <input id="rate" class="slider" type="range" min="0.5" max="4" step="0.1" value="1" aria-label="Tốc độ phát" disabled>
+      <div id="presets" class="presets" role="group" aria-label="Tốc độ nhanh">
+        <button type="button" data-rate="0.5" disabled>0,5×</button>
+        <button type="button" data-rate="1" disabled>1×</button>
+        <button type="button" data-rate="1.5" disabled>1,5×</button>
+        <button type="button" data-rate="2" disabled>2×</button>
+        <button type="button" data-rate="3" disabled>3×</button>
+        <button type="button" data-rate="4" disabled>4×</button>
+      </div>
+      <label class="row select-row">
+        <span><strong>Equalizer</strong><small id="eq-note">Đang kiểm tra…</small></span>
+        <select id="eq" aria-label="Bộ cân bằng âm thanh" disabled>
+          <option value="off">Tắt</option>
+          <option value="normal">Normal</option>
+          <option value="bass">Bass Boost</option>
+          <option value="vocal">Vocal</option>
+          <option value="treble">Treble Boost</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="card" aria-labelledby="actions-heading">
+      <div class="card-head"><h2 id="actions-heading">ACTIONS</h2></div>
+      <div class="stack">
+        <button id="capture" class="action" type="button" disabled>Chụp khung hình</button>
+        <button id="capture-region" class="action secondary" type="button" hidden disabled>Chụp vùng đang hiển thị</button>
+      </div>
+      <div class="download">
+        <h3>Tải video/âm thanh</h3>
+        <div class="url-row">
+          <input id="url" type="url" inputmode="url" placeholder="Dán URL TikTok…" aria-label="URL TikTok"
+                 autocomplete="off" spellcheck="false">
+          <button id="analyze" type="button">Phân tích</button>
+        </div>
+        <button id="use-current" class="link" type="button" hidden>Dùng video đang xem</button>
+        <p id="download-note" class="note" role="status" aria-live="polite">Phân tích link để xem những bản tải được. Không tự tải khi vừa dán link.</p>
+        <div id="download-result" hidden>
+          <p id="download-meta" class="meta"></p>
+          <ul id="download-rows" class="rows" aria-label="Các bản có thể tải"></ul>
+          <p id="download-progress" class="note" role="status" aria-live="polite" hidden></p>
+        </div>
+      </div>
+      <p id="error" class="error" role="alert" aria-live="assertive" hidden></p>
+      <p id="notice" class="notice" role="status" aria-live="polite" hidden></p>
+    </section>
+  </main>
+
+  <footer><span id="version">v0.0.1</span> · Tùy chọn được lưu trên máy của bạn.</footer>
+</body>
+</html>

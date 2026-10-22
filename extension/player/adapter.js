@@ -1,0 +1,100 @@
+(() => {
+  "use strict";
+  const ns = globalThis.TikTokTools = globalThis.TikTokTools || {};
+  const selectors = ns.selectors;
+
+  function mediaElements(root = document) {
+    return [...root.querySelectorAll("video")];
+  }
+
+  // TikTok có thể vẽ khung hình lên canvas trong `tt-vod-sr-wrap` bên cạnh <video>.
+  // Renderer là các phần tử hiển thị thật sự; không gồm controls hay canvas khác.
+  function renderTargets(video) {
+    const wrappers = [...(video.parentElement?.children ?? [])]
+      .filter(element => element.matches(selectors.renderer));
+    return [video, ...wrappers];
+  }
+
+  function isEnhanced(video) {
+    return renderTargets(video).length > 1;
+  }
+
+  function union(a, b) {
+    const left = Math.min(a.left, b.left);
+    const top = Math.min(a.top, b.top);
+    const right = Math.max(a.right, b.right);
+    const bottom = Math.max(a.bottom, b.bottom);
+    return { left, top, right, bottom, width: right - left, height: bottom - top,
+      x: left, y: top };
+  }
+
+  // Hình chữ nhật của video đang hiển thị: hợp của các renderer có kích thước thật.
+  function visibleRect(video) {
+    let rect = null;
+    for (const target of renderTargets(video)) {
+      const value = target.getBoundingClientRect();
+      if (value.width < 40 || value.height < 40) continue;
+      rect = rect ? union(rect, value) : value;
+    }
+    return rect ?? video.getBoundingClientRect();
+  }
+
+  function scoreTarget(target, video) {
+    const rect = target.getBoundingClientRect();
+    const fullscreen = document.fullscreenElement;
+    if (fullscreen && fullscreen !== target && !fullscreen.contains(target)) return 0;
+    if (rect.width < 80 || rect.height < 80) return 0;
+    const style = getComputedStyle(target);
+    if (style.visibility !== "visible" || Number(style.opacity) === 0 || style.display === "none") return 0;
+    const width = Math.max(0, Math.min(rect.right, innerWidth) - Math.max(rect.left, 0));
+    const height = Math.max(0, Math.min(rect.bottom, innerHeight) - Math.max(rect.top, 0));
+    const area = width * height;
+    const distance = Math.abs((Math.max(rect.top, 0) + Math.min(rect.bottom, innerHeight)) / 2 - innerHeight / 2);
+    return area / (1 + distance / innerHeight) * (video.paused ? 1 : 1.25);
+  }
+
+  function score(video) {
+    return Math.max(0, ...renderTargets(video).map(target => scoreTarget(target, video)));
+  }
+
+  function pick(videos) {
+    let best = 0;
+    let chosen = null;
+    for (const video of videos) {
+      const value = score(video);
+      if (value > best) {
+        best = value;
+        chosen = video;
+      }
+    }
+    return chosen;
+  }
+
+  function videoId() {
+    const match = location.pathname.match(/\/video\/(\d{6,25})/);
+    return match ? match[1] : null;
+  }
+
+  function author() {
+    const match = location.pathname.match(/^\/@([^/]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+  }
+
+  function canonicalUrl() {
+    const id = videoId();
+    if (!id) return null;
+    const name = author();
+    return name ? `https://www.tiktok.com/@${name}/video/${id}` : `https://www.tiktok.com/video/${id}`;
+  }
+
+  ns.player = Object.freeze({
+    mediaElements,
+    renderTargets,
+    visibleRect,
+    isEnhanced,
+    score,
+    pick,
+    videoId,
+    canonicalUrl
+  });
+})();

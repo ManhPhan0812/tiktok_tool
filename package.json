@@ -1,0 +1,19 @@
+{
+  "name": "tiktok-tools",
+  "version": "0.0.1",
+  "private": true,
+  "description": "TikTok desktop extension: mirror, playback tools, frame capture and video download",
+  "scripts": {
+    "test": "playwright test",
+    "live": "node tools/live-check.cjs",
+    "check:resolve": "node tools/resolve-check.cjs",
+    "icons": "python tools/make_icons.py",
+    "package": "powershell -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}

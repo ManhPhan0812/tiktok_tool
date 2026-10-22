@@ -1,0 +1,13 @@
+video[data-tiktok-tools-mirrored],
+tt-vod-sr-wrap[data-tiktok-tools-mirrored] {
+  transform: var(--tiktok-tools-transform, matrix(1, 0, 0, 1, 0, 0)) scaleX(-1) !important;
+}
+
+/* Clean Mode: chỉ ẩn các lớp thông tin do extension nhận diện, không xóa DOM.
+   Vùng nút thao tác và bình luận không nằm trong danh sách này. */
+html[data-tiktok-tools-clean="1"] [class*="DivMediaCardOverlayBottomSection"],
+html[data-tiktok-tools-clean="1"] [class*="DivOverlayBottomContent"],
+html[data-tiktok-tools-clean="1"] [class*="DivVideoProgressContainer"],
+html[data-tiktok-tools-clean="1"] [data-e2e="capcut-tag"] {
+  display: none !important;
+}
