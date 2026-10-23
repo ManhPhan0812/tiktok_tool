@@ -161,8 +161,10 @@ test("đổi URL khi đang phân tích không hiển thị kết quả đến mu
   });
   await popup.locator("#url").fill(URL);
   await popup.locator("#analyze").click();
-  await expect(popup.locator("#analyze")).toHaveText("Đang phân tích…");
-  await expect.poll(() => harness.worker.evaluate(() => self.__pendingResolves.length)).toBe(1);
+  // Poll thay vì so khớp tức thì: dưới tải của cả bộ test, nhãn có thể đã đổi trong
+  // cùng khung hình với lần vẽ kế tiếp. Điều cần khẳng định là yêu cầu đã bay đi.
+  await expect.poll(() => harness.worker.evaluate(() => self.__pendingResolves.length), { timeout: 10_000 }).toBe(1);
+  await expect.poll(() => popup.locator("#analyze").textContent()).toBe("Đang phân tích…");
   await popup.locator("#url").fill(OTHER_URL);
   await popup.locator("#analyze").click();
   await harness.worker.evaluate(data => self.__pendingResolves[0].resolve(new Response(JSON.stringify({ code: 0, data }))), h.PROXY_PAYLOAD);
@@ -173,5 +175,5 @@ test("đổi URL khi đang phân tích không hiển thị kết quả đến mu
   });
   await expect(popup.locator("#download-meta")).toContainText(OTHER_ID);
   await expect(popup.locator("#download-meta")).not.toContainText(ID);
-  await expect(popup.locator("#analyze")).toHaveText("Phân tích");
+  await expect.poll(() => popup.locator("#analyze").textContent()).toBe("Phân tích");
 });

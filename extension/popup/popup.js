@@ -43,7 +43,10 @@
   let rateTimer = null;
   let jobTimer = null;
   let analysisRevision = 0;
-  let eqState = { supported: true, attached: false, preset: "off" };
+  let eqState = { supported: true, attached: false, preset: "off", missing: [], stale: false, lastError: null };
+  let eqRetryTimer = null;
+  let eqChanging = false;
+  let eqRevision = 0;
 
   function showError(message) {
     el.error.textContent = message || "";
@@ -111,12 +114,26 @@
   }
 
   function renderEq(data) {
-    if (data) eqState = data;
+    if (data) eqState = { ...eqState, ...data };
     const connected = Boolean(status);
-    el.eq.disabled = !eqState.supported || !connected;
-    if (!eqState.supported) {
+    const supported = eqState.supported !== false;
+    el.eq.disabled = eqChanging || !supported || !connected;
+    if (eqChanging) return;
+    if (!supported) {
+      const missing = Array.isArray(eqState.missing) ? eqState.missing.filter(Boolean) : [];
       el.eqNote.textContent = "Trình duyệt không hỗ trợ";
-      el.eq.title = "Cần tabCapture và offscreen (Chrome/Edge 116 trở lên).";
+      el.eq.title = [
+        missing.length ? `Thiếu API: ${missing.join(", ")}.` : "",
+        "Cần Chrome hoặc Edge 116 trở lên (có tabCapture và offscreen).",
+        eqState.browser ? `Trình duyệt: ${eqState.browser}` : ""
+      ].filter(Boolean).join(" ");
+      return;
+    }
+    // Trạng thái cũ: giữ nguyên lựa chọn của người dùng, chỉ báo là chưa lấy được
+    // trạng thái mới. Không khoá dropdown vì một lần không phản hồi.
+    if (eqState.stale) {
+      el.eqNote.textContent = "Không phản hồi · đang thử lại";
+      el.eq.title = "Trình duyệt chưa phản hồi trạng thái Equalizer. Đang thử lại tự động; nếu kéo dài, hãy tải lại extension.";
       return;
     }
     el.eq.value = eqState.attached ? eqState.preset : "off";
@@ -127,10 +144,37 @@
   }
 
   async function refreshEq() {
+    if (eqChanging) return;
+    const revision = eqRevision;
     try {
-      renderEq(await request(types.EQ_STATUS));
-    } catch {
-      renderEq({ supported: false, attached: false, preset: "off" });
+      const data = await request(types.EQ_STATUS);
+      if (eqChanging || revision !== eqRevision) return;
+      const canCapture = Boolean(data.workerCapture);
+      renderEq({
+        ...data,
+        supported: data.offscreen !== false && canCapture,
+        stale: false,
+        lastError: null
+      });
+      clearTimeout(eqRetryTimer);
+      eqRetryTimer = null;
+    } catch (error) {
+      if (eqChanging || revision !== eqRevision) return;
+      // Không phản hồi KHÔNG đồng nghĩa trình duyệt không hỗ trợ: giữ nguyên kết luận
+      // đã biết và chỉ đánh dấu là cũ, để người dùng không bị khoá vĩnh viễn.
+      renderEq({ stale: true, lastError: error?.message || null });
+      el.eq.title = [
+        `Chưa lấy được trạng thái Equalizer: ${error?.message || "không rõ lỗi"}.`,
+        "Đang thử lại tự động.",
+        "Nếu kéo dài: tải lại extension trong chrome://extensions, rồi mở lại popup."
+      ].join(" ");
+      // Thử lại sớm một lần: service worker có thể vừa bị dừng và đang khởi động lại.
+      if (!eqRetryTimer) {
+        eqRetryTimer = setTimeout(() => {
+          eqRetryTimer = null;
+          refreshEq();
+        }, 600);
+      }
     }
   }
 
@@ -180,14 +224,19 @@
     if (document.hidden || inFlight) return;
     inFlight = true;
     try {
-      renderStatus(await request(types.PLAYER_STATUS));
-      await refreshEq();
-    } catch (error) {
-      if (error.code === "NO_RECEIVER" || error.code === "NO_TAB" || error.code === "NO_RESPONSE") {
-        renderDisconnected();
-      } else {
-        showError(error.message);
+      try {
+        renderStatus(await request(types.PLAYER_STATUS));
+      } catch (error) {
+        if (error.code === "NO_RECEIVER" || error.code === "NO_TAB" || error.code === "NO_RESPONSE") {
+          renderDisconnected();
+        } else {
+          showError(error.message);
+        }
       }
+      // Trạng thái Equalizer phải cập nhật độc lập: trước đây nó nằm chung try với
+      // PLAYER_STATUS nên chỉ cần trạng thái video lỗi là ô Equalizer đứng nguyên ở
+      // "Không phản hồi · đang thử lại" mãi, dù service worker đã trả lời được.
+      if (status) await refreshEq();
     } finally {
       inFlight = false;
     }
@@ -463,21 +512,42 @@
   });
 
   el.eq.addEventListener("change", async () => {
+    if (eqChanging) return;
     const preset = el.eq.value;
+    eqChanging = true;
+    eqRevision++;
+    clearTimeout(eqRetryTimer);
+    eqRetryTimer = null;
     el.eq.disabled = true;
+    el.eqNote.textContent = preset === "off" ? "Đang tắt…" : "Đang bật…";
     showError("");
     try {
-      const result = preset === "off"
-        ? await request(types.EQ_STOP)
-        : await request(types.EQ_START, { preset, tabId });
-      renderEq({ supported: eqState.supported, attached: Boolean(result?.attached), preset: result?.preset || preset });
-      if (preset !== "off" && !result?.attached) {
+      if (preset === "off") {
+        const result = await request(types.EQ_STOP);
+        renderEq({
+          supported: eqState.supported,
+          attached: Boolean(result?.attached),
+          preset: result?.preset || "off",
+          stale: false
+        });
+        return;
+      }
+      const result = await request(types.EQ_START, { preset, tabId });
+      renderEq({
+        supported: eqState.supported,
+        attached: Boolean(result?.attached),
+        preset: result?.preset || preset,
+        stale: false
+      });
+      if (!result?.attached) {
         showError("Equalizer chưa bật được trên tab này. Hãy mở popup bằng cách bấm icon extension.");
       }
     } catch (error) {
       showError(error.message);
-      renderEq({ supported: eqState.supported, attached: false, preset: "off" });
+      renderEq({ supported: eqState.supported, attached: false, preset: "off", stale: false });
     } finally {
+      eqChanging = false;
+      eqRevision++;
       await refreshEq();
     }
   });

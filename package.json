@@ -1,6 +1,6 @@
 {
   "name": "tiktok-tools",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "TikTok desktop extension: mirror, playback tools, frame capture and video download",
   "scripts": {

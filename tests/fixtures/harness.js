@@ -89,7 +89,7 @@ const PAGE_HTML = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><s
   <article id="second"><video id="two"></video></article>
 </main></body></html>`;
 
-async function launch({ routePage = true } = {}) {
+async function launch({ routePage = true, browserArgs = [] } = {}) {
   const profile = await fs.mkdtemp(path.join(os.tmpdir(), "tiktok-tools-test-"));
   const downloadDir = path.join(profile, "downloads");
   // Không để Chrome ghi file kiểm thử vào thư mục Downloads của người dùng.
@@ -107,7 +107,7 @@ async function launch({ routePage = true } = {}) {
     acceptDownloads: true,
     headless: true,
     viewport: { width: 1100, height: 760 },
-    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`]
+    args: [`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`, ...browserArgs]
   });
   const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
   // Download do chrome.downloads tạo ra không đi qua Playwright, nên đặt thư mục đích

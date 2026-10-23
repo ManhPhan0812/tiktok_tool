@@ -1,5 +1,27 @@
 # Trạng thái theo PLAN.md
 
+## Sửa Equalizer 0.0.2 — 23/10/2026
+
+**Triệu chứng được xác nhận:** chọn Bass/Vocal/Treble nhưng ô hiện “Không phản hồi · đang thử lại” rồi tự trở về Tắt.
+
+**Tái hiện nguyên nhân:** khi tạo offscreen thật, gửi `EQ_STATUS` từ popup nhận `{ ok: false, error: { code: "BAD_REQUEST", message: "Lệnh Equalizer không hợp lệ." } }`. Listener offscreen cũ nhận mọi lệnh có tiền tố `EQ_`, bao gồm lệnh dành cho background. Hai nơi tranh trả lời; `EQ_SET_PRESET` còn có thể trả trạng thái của offscreen trước khi background lưu preset.
+
+**Bản sửa:**
+
+- Message nội bộ có `target: "offscreen"`; background bỏ qua target này và offscreen chỉ nhận đúng bốn lệnh nội bộ. Không tranh trả lời các lệnh của popup.
+- Stream ID được lấy trong service worker, đúng luồng worker → offscreen của [Chrome 116+](https://developer.chrome.com/docs/extensions/reference/api/tabCapture). Không còn lấy stream ID từ popup.
+- Gửi tab ID vào phiên xử lý; đổi preset trong cùng tab dùng lại luồng và AudioContext. Bật/tắt/đổi preset được xếp hàng, có timeout và khóa UI trong lúc chuyển trạng thái.
+- Polling cũ không ghi đè lựa chọn đang bật; nhãn chỉ báo “Đang bật” khi AudioContext đang `running` và audio track còn `live`.
+- Theo dõi track kết thúc, dọn node/stream và khôi phục Tắt; limiter hạn chế đỉnh gain khi boost.
+
+**Kiểm chứng chức năng:** `tests/equalizer-audio.spec.js` dùng vùng offscreen thật và đồ thị Web Audio thật. Chỉ nguồn âm/quyền capture được thay bằng stream tổng hợp ba tần số, không dùng âm thanh hay phiên Chrome cá nhân của người dùng. Đã đo đáp ứng sau bộ lọc: Bass tăng dải 60 Hz khoảng 2,1 dB; Vocal tăng 1 kHz khoảng 3,1 dB; Treble tăng 12 kHz khoảng 2,3 dB so với Normal. Các phép đo này không thay cho nghe thử chất lượng trên loa/tai nghe.
+
+Ba kiểm thử tích hợp xác nhận thêm: không nhận nhầm lệnh khi offscreen tồn tại; chỉ mở một luồng qua tất cả preset; giữ preset qua polling và đóng/mở popup; dọn bộ lọc khi track kết thúc. Năm bài hồi quy trạng thái trước đó vẫn được giữ.
+
+Kết quả cuối: **64/64 kiểm thử đạt** trên Edge/Chromium; gói `tiktok-tools-v0.0.2.zip` đã kiểm tra manifest và đối chiếu các tệp runtime với mã nguồn. Quyền thu âm tab trên Chrome cá nhân và chất lượng nghe thực tế cần xác nhận khi người dùng nạp lại extension.
+
+## Lịch sử kiểm chứng trước bản sửa
+
 Phiên bản phát hành: **0.0.1**. Toàn bộ mã của bản thử nghiệm nội bộ 0.2.2 được giữ nguyên tính năng và đổi số thành 0.0.1 để phát hành lần đầu trên GitHub. Các số 0.1.x/0.2.x bên dưới là mốc khảo sát/phát triển nội bộ, không phải các release đã xuất bản.
 
 | Giai đoạn | Nội dung | Trạng thái | Bằng chứng |
@@ -10,11 +32,11 @@ Phiên bản phát hành: **0.0.1**. Toàn bộ mã của bản thử nghiệm n
 | 3 | Chụp ảnh | Xong | `tests/capture.spec.js`: PNG đúng 320×240, kiểm tra pixel sau khi giải mã, đúng chiều lật, lỗi thiếu khung hình |
 | 4 | Tải video | Xong | `tests/downloads.spec.js` (10 bài: ánh xạ bốn trường API, `wm_size = 0`, `hdplay` trùng `play`, dự phòng dữ liệu trang, lỗi lúc bấm tải, lỗi URL, mặc định HD, chống trùng, UI). Đo thật trên `@trambongda07/7696288287266196743`: HD 7 847 621 B **1080×1440 hvc1**, chuẩn 12 323 513 B **576×768 avc1**, logo 12 878 271 B, MP3 832 201 B |
 | 5 | Equalizer + MP3 | EQ: xong mã (thử nghiệm) · MP3: xong | `tests/equalizer.spec.js` (4 bài). Âm thanh EQ phải nghe thử bằng tay; MP3 là tệp `music` của TikTok, không phải bản trích video |
-| 6 | Kiểm thử, tài liệu, đóng gói | Gần xong | 47 bài xanh, README, CHANGELOG, `docs/feasibility.md`, icon mới (nguồn ghi ở `docs/assets.md`), `tiktok-tools-v0.2.0.zip` |
+| 6 | Kiểm thử, tài liệu, đóng gói | Gần xong | 61 bài xanh, README, CHANGELOG, `docs/feasibility.md`, icon mới (nguồn ghi ở `docs/assets.md`), `tiktok-tools-v0.2.0.zip` |
 
 ## Bộ test 0.1.1 và bộ test hiện tại
 
-Bộ 12 bài của 0.1.1 kiểm tra giao thức `ttt:*` — giao thức mà PLAN thay bằng phong bì `{ ok, data }`. Vì vậy bộ cũ không còn chạy được trên mã mới và đã được thay bằng 47 bài chia theo tính năng, phủ đủ 12 hành vi cũ và thêm các phần mới:
+Bộ 12 bài của 0.1.1 kiểm tra giao thức `ttt:*` — giao thức mà PLAN thay bằng phong bì `{ ok, data }`. Vì vậy bộ cũ không còn chạy được trên mã mới và đã được thay bằng 61 bài chia theo tính năng, phủ đủ 12 hành vi cũ và thêm các phần mới:
 
 | Hành vi của bộ 0.1.1 | Nơi kiểm tra hiện tại |
 | --- | --- |
@@ -119,3 +141,37 @@ Kết quả kiểm chứng 0.2.1 ngày 22/10/2026:
 - Chạy `check:resolve` với đúng URL người dùng báo lỗi: popup v0.2.1 hiện đúng video ID `7697075597226315026`, tác giả `967.432.813.hieutpbank`, thời lượng 26 giây, **4 lựa chọn khả dụng** từ TikWM; HD không logo được chọn mặc định. Thử trong profile sạch, không cần metadata trang TikTok. Ảnh ghi nhận tại `test-results/resolve-live.png`.
 - Bộ live trước đó đã tải đủ HD, chuẩn, logo và MP3 của clip mẫu `7696288287266196743`, kiểm tra container/codec và byte thực. Với clip người dùng báo lỗi mới, lần kiểm chứng này tập trung vào thao tác Phân tích, không khẳng định đã tải file của clip đó.
 - Đã cập nhật thư mục nguồn `extension/`, bản giải nén `tiktok-tools-v0.2.0/` trong workspace và ZIP mới `tiktok-tools-v0.2.1.zip`. Người dùng vẫn cần Reload extension trong Chrome và kiểm tra phiên bản hiện trong popup; chưa có kết nối để tự thao tác extension đang cài trong profile Chrome của người dùng.
+
+## Sửa lỗi Equalizer báo nhầm "không hỗ trợ"
+
+Người dùng báo: chọn preset Equalizer luôn thấy "Trình duyệt không hỗ trợ" và ô điều khiển bị khoá lại.
+
+**Nguyên nhân.** `popup.js` xử lý thất bại của `EQ_STATUS` bằng `renderEq({ supported: false, ... })`. Nghĩa là *một lần không phản hồi* bị quy về *trình duyệt không hỗ trợ*, và `supported = false` được ghi vào `eqState` rồi tự ghi đè ở mỗi vòng poll 900 ms. Ô dropdown chỉ được mở khoá bên trong `renderEq`, nên nó bị khoá và không tự mở lại. Phía background, `eqSupported()` gộp `tabCapture` và `offscreen` thành một cờ chung nên không biết API nào thực sự thiếu.
+
+**Đã sửa.**
+
+1. `background.js`: `eqCapabilities()` tách `offscreen` (bắt buộc) và `tabCapture` (tách theo service worker / popup); `EQ_STATUS` trả kèm `missing`, `browser` và không bao giờ ném lỗi.
+2. `background.js`: phân biệt `UNSUPPORTED` (thiếu API) với `BLOCKED` (chưa được cấp `activeTab`). Thử nghiệm lấy stream ID từ popup đã được thay bằng lấy từ service worker ở bản sửa 0.0.2 bên dưới.
+3. `popup.js`: lỗi trao đổi thông điệp chỉ đánh dấu `stale`, giữ nguyên kết luận đã biết và **không** khoá dropdown; hiển thị "Không phản hồi · đang thử lại".
+4. `popup.js`: gửi yêu cầu bật tới background; bản sửa 0.0.2 để service worker lấy stream ID theo phạm vi offscreen của Chrome 116+.
+
+**Kiểm chứng.** Thêm 3 bài ở `tests/equalizer.spec.js`: báo từng khả năng, dropdown mở khoá khi trình duyệt hỗ trợ, và lỗi `EQ_STATUS` không được báo nhầm "không hỗ trợ" cũng không khoá dropdown. Bài thứ ba được xác nhận **fail** khi tạm thời revert đúng thay đổi ở `refreshEq()`, và pass khi khôi phục. Toàn bộ **61 bài** xanh trên Edge.
+
+**Còn lại:** vẫn cần nghe thử bằng tai trên máy thật (EQ là mức thử nghiệm), và nếu người dùng vẫn thấy "Trình duyệt không hỗ trợ" thì tooltip của ô Equalizer sẽ cho biết đúng API đang thiếu cùng phiên bản trình duyệt.
+
+## Sửa lỗi Equalizer kẹt ở "Không phản hồi · đang thử lại"
+
+Người dùng báo sau khi cập nhật: ô Equalizer đứng nguyên ở "Không phản hồi · đang thử lại" dù trình duyệt có đủ API.
+
+**Nguyên nhân (hai lỗi chồng lên nhau).**
+
+1. Trong vòng poll 900 ms, `poll()` gọi `renderStatus(await request(PLAYER_STATUS))` rồi `await refreshEq()` **trong cùng một khối `try`**. Trạng thái video lỗi (ví dụ tab vừa điều hướng, content script chưa sẵn sàng, hoặc service worker trả mã lỗi khác `NO_RECEIVER/NO_TAB/NO_RESPONSE`) làm `refreshEq()` bị bỏ qua ở mọi vòng, nên nhãn "không phản hồi" đã hiện thì không bao giờ được cập nhật lại.
+2. `eqStatus()` gọi `await readSettings()` **trước** khi tạo phản hồi và không có `try/catch`. Chỉ cần bước đọc tùy chọn ném lỗi (storage chậm, dữ liệu lạ) là toàn bộ `EQ_STATUS` hỏng theo — popup thấy lỗi và chuyển sang "Không phản hồi · đang thử lại" vĩnh viễn, trong khi các phần khác của popup vẫn dùng được.
+3. Thêm nữa: vùng `offscreen` "mồ côi" (còn sống sau khi extension được tải lại nhưng không trả lời thông điệp) bị coi là `attached: false` mà không được dọn, nên lần bật sau vẫn gặp đúng vùng chết đó.
+
+**Đã sửa.**
+
+- `popup.js`: tách `refreshEq()` ra khỏi khối `try` của `PLAYER_STATUS`, chỉ gọi khi đã có trạng thái video; thử lại sớm một lần (600 ms) khi lỗi; tooltip ghi rõ thông báo lỗi thật.
+- `background.js`: `eqStatus()` bọc `readSettings()` và `hasOffscreen()` trong `try/catch`, luôn trả `msg.ok` kèm `readError`/`offscreenError`; nếu vùng offscreen không trả lời thì `closeOffscreen()` ngay để lần sau dựng vùng mới.
+
+**Kiểm chứng.** Thêm 2 bài: "vùng offscreen mồ côi bị đóng" (stub `chrome.offscreen.hasDocument` = true, kiểm tra `closeDocument` được gọi và trạng thái vẫn trả về được) và "trạng thái video lỗi không chặn cập nhật ô Equalizer" (chặn `EQ_STATUS` trước để nhãn chuyển sang không phản hồi, rồi chỉ chặn `PLAYER_STATUS` và kiểm tra nhãn tự cập nhật lại). Bài thứ hai **fail** trên mã cũ vì `refreshEq()` bị bỏ qua. Toàn bộ **61 bài** xanh.

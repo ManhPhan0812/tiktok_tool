@@ -2,13 +2,21 @@
 
 Extension cho Chrome/Edge trên máy tính: lật ngang video, điều khiển phát, ẩn lớp thông tin, phát nền, chụp khung hình và tải video TikTok đang xem hoặc từ link được dán.
 
-## Bản phát hành 0.0.1
+## Bản sửa Equalizer 0.0.2
+
+[Tải tiktok-tools-v0.0.2.zip](https://github.com/ManhPhan0812/tiktok_tool/releases/download/v0.0.2/tiktok-tools-v0.0.2.zip) · [Release và ghi chú](https://github.com/ManhPhan0812/tiktok_tool/releases/tag/v0.0.2)
+
+Sửa trường hợp chọn Bass/Vocal/Treble nhưng popup hiện "Không phản hồi · đang thử lại" và tự nhảy về Tắt. Lệnh tới vùng xử lý âm thanh được định tuyến riêng, đổi preset giữ nguyên luồng và popup chỉ báo bật khi audio đang chạy. Nguồn âm và bộ lọc được xử lý cục bộ, không gửi âm thanh ra ngoài.
+
+Sau khi cập nhật, mở `chrome://extensions`, nhấn **Tải lại** TikTok Tools, tải lại tab TikTok rồi bấm icon extension để chọn preset. Popup cần hiện **v0.0.2**. Không mở popup bằng URL trực tiếp vì cách đó không cấp quyền `activeTab`.
+
+## Bản GitHub 0.0.1
 
 [Tải tiktok-tools-v0.0.1.zip](https://github.com/ManhPhan0812/tiktok_tool/releases/download/v0.0.1/tiktok-tools-v0.0.1.zip) · [Release và ghi chú](https://github.com/ManhPhan0812/tiktok_tool/releases/tag/v0.0.1)
 
 Đây là release đầu tiên, bao gồm toàn bộ chức năng của bản thử nghiệm nội bộ 0.2.2. Số phiên bản trong manifest, popup và package được thống nhất thành **0.0.1**; không hạ cấp chức năng và không xóa tùy chọn đã lưu. Các mốc 0.1.x/0.2.x trong PLAN và tài liệu khảo sát là lịch sử phát triển nội bộ.
 
-Logo [TikTok Aesthetic Brown](https://www.iconpacks.net/free-icon/tiktok-aesthetic-brown-23190.html) được đóng gói cục bộ và dùng thống nhất cho thanh công cụ, popup và nút nổi. Bộ kiểm thử gồm **56 bài**; EQ vẫn ghi rõ là thử nghiệm.
+Logo [TikTok Aesthetic Brown](https://www.iconpacks.net/free-icon/tiktok-aesthetic-brown-23190.html) được đóng gói cục bộ và dùng thống nhất cho thanh công cụ, popup và nút nổi. Bộ kiểm thử gồm **64 bài**; EQ đã được kiểm tra đáp ứng bằng âm tổng hợp nhưng chất lượng nghe trên loa/tai nghe thật vẫn cần thử.
 
 ## Trạng thái tính năng
 
@@ -28,7 +36,7 @@ Logo [TikTok Aesthetic Brown](https://www.iconpacks.net/free-icon/tiktok-aesthet
 | Giao diện sáng/tối | Dùng được | Lưu trên máy |
 
 
-Sau khi cập nhật, Reload extension và tải lại TikTok. Popup cần hiển thị **v0.0.1**.
+Sau khi cập nhật mã hiện tại, Reload extension và tải lại TikTok. Popup cần hiển thị **v0.0.2**; bản GitHub 0.0.1 là bản trước sửa Equalizer.
 
 ## Cài đặt
 
@@ -95,7 +103,7 @@ Quy tắc chọn bản:
 - **Hàng "có logo" không phải lúc nào cũng có.** TikTok không tạo bản có logo cho mọi video; extension dựa vào `wm_size > 0` và khoá hàng khi không có, thay vì đưa tệp không logo mà gắn nhãn có logo.
 - **Tên tệp khi tải chưa kiểm chứng được trong môi trường test.** Tham số `filename` (`TikTok/<user>_<id>_<loại>.<ext>`) được gửi đúng — có test kiểm tra — nhưng trình duyệt trong bộ test (Playwright) đặt tên khác (`download.<ext>`), nên tên tệp thực tế cần xem lại khi dùng thật.
 - **Equalizer mới ở mức thử nghiệm.** Mã đã xong (tabCapture + offscreen + 5 dải 60/250/1k/4k/12k Hz, 4 preset, preamp chống vỡ tiếng) nhưng chất lượng âm thanh chưa được kiểm chứng bằng tai. Cần mở popup bằng cách bấm icon để có quyền `activeTab`; nếu không, popup báo lỗi và giữ nguyên trạng thái tắt.
-- **Tên tệp khi tải chưa kiểm chứng được trong môi trường test.** Tham số `filename` (`TikTok/<user>_<id>_<loại>.<ext>`) được gửi đúng — có test kiểm tra — nhưng trình duyệt trong bộ test (Playwright) đặt tên khác (`download.<ext>`), nên tên tệp thực tế cần xem lại khi dùng thật.
+- **Popup báo "Trình duyệt không hỗ trợ" cho Equalizer thì không phải lỗi mạng.** Đây là kết luận khi trình duyệt thật sự thiếu API: rê chuột lên ô Equalizer sẽ hiện đúng tên API còn thiếu và phiên bản trình duyệt. Cần Chrome hoặc Edge **116 trở lên** (Firefox không có `offscreen`/`tabCapture` nên không dùng được Equalizer). Nếu ô Equalizer báo "Không phản hồi · đang thử lại" thì đó là lỗi trao đổi thông điệp tạm thời, extension tự thử lại và **không** khoá ô điều khiển.
 - Ảnh lưu phẳng trong thư mục Downloads; video tải vào thư mục con `TikTok/` (khi tải thành công).
 - Chụp vùng hiển thị cần mở popup bằng cách bấm icon (quyền `activeTab`). Mở popup bằng URL trực tiếp sẽ báo lỗi rõ ràng thay vì chụp sai.
 - Phân tích gọi tikwm.com nên cần mạng; nếu dịch vụ chậm, popup chờ tới 12 giây mỗi lần thử. Dữ liệu trang chỉ được đọc khi dịch vụ lỗi, và việc đó mất thêm vài giây.
@@ -126,13 +134,13 @@ $env:TIKTOK_TOOLS_BROWSER_PATH = 'C:\Program Files (x86)\Microsoft\Edge\Applicat
 npm test
 ```
 
-47 bài kiểm thử, chia theo tính năng:
+64 bài kiểm thử, chia theo tính năng:
 
 - `tests/mirror.spec.js` — lật/khôi phục, transform của TikTok, cuộn feed, video tái sử dụng, chế độ tự lật, fullscreen, trình phát canvas.
 - `tests/playback.spec.js` — tốc độ, Clean Mode, Background Play (chuyển tab thật với focus emulation tắt).
 - `tests/capture.spec.js` — PNG đúng kích thước, đúng chiều lật (kiểm tra pixel sau khi giải mã), lỗi thiếu khung hình, giới hạn quyền chụp vùng.
 - `tests/downloads.spec.js` — ánh xạ bốn định dạng từ API, hàng logo bị khoá khi `wm_size = 0`, HD trùng tệp, quay về dữ liệu trang khi dịch vụ lỗi, lỗi lúc bấm tải, chống tải trùng, UI bốn hàng.
-- `tests/equalizer.spec.js` — khả năng hỗ trợ, lỗi thiếu `activeTab`, lưu preset, tắt và dọn vùng âm thanh.
+- `tests/equalizer.spec.js` — khả năng hỗ trợ (báo riêng từng API), lỗi thiếu `activeTab`, lưu preset, tắt và dọn vùng âm thanh; thông điệp trạng thái lỗi không được báo nhầm là "trình duyệt không hỗ trợ" và không khoá ô điều khiển.
 - `tests/popup.spec.js` — bố cục 360 px, theme, điều khiển tab, migrate settings, trạng thái Equalizer.
 - `tests/icons.spec.js` — giải mã PNG của bốn icon để kiểm tra kích thước, nền trong suốt, có hình thật, và manifest trỏ đúng tệp.
 

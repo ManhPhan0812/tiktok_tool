@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TikTok Tools",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình và tải video TikTok.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "downloads", "activeTab", "tabCapture", "offscreen"],

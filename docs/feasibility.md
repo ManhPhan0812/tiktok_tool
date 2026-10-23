@@ -123,9 +123,10 @@ Với `tt-vod-sr-wrap > canvas`: cần kiểm tra thêm khả năng đọc buffe
 
 ### 7.5. Bộ kiểm thử
 
-- 47 bài Playwright, chạy bằng Edge thật qua `TIKTOK_TOOLS_BROWSER_PATH`, 47/47 xanh, khoảng 56 s cho toàn bộ.
+- 61 bài Playwright, chạy bằng Edge thật qua `TIKTOK_TOOLS_BROWSER_PATH`, 61/61 xanh, khoảng 1,9 phút cho toàn bộ.
 - Ảnh chụp được kiểm tra ở mức pixel (giải mã PNG) và tên tệp, không chỉ kiểm tra "có tệp"; icon cũng được giải mã PNG để khẳng định có hình thật.
-- Các phần **chưa** kiểm chứng tự động: chụp vùng hiển thị, âm thanh EQ, tên tệp thực tế do Chrome đặt, và toàn bộ hành vi trên TikTok thật (dùng `tools/live-check.cjs` để đo tay; script này giờ đọc cả box MP4 để so độ phân giải HD với bản chuẩn).
+- Cập nhật 23/10/2026: `tests/equalizer-audio.spec.js` kiểm tra vùng offscreen và Web Audio thật với nguồn âm tổng hợp, đo gain từng preset và vòng đời luồng. Quyền lấy âm thanh tab và chất lượng nghe trên phần cứng vẫn cần thử thủ công.
+- Các phần **chưa** kiểm chứng tự động: chụp vùng hiển thị, chất lượng EQ bằng tai, tên tệp thực tế do Chrome đặt, và toàn bộ hành vi trên TikTok thật (dùng `tools/live-check.cjs` để đo tay; script này giờ đọc cả box MP4 để so độ phân giải HD với bản chuẩn).
 
 ### 7.6. Nguồn tải: tikwm.com
 
