@@ -8,6 +8,7 @@
   <script src="../shared/settings.js" defer></script>
   <script src="../shared/messages.js" defer></script>
   <script src="../shared/validation.js" defer></script>
+  <script src="../shared/platform.js" defer></script>
   <script src="../shared/equalizer.js" defer></script>
   <script src="popup.js" defer></script>
 </head>
@@ -16,7 +17,7 @@
     <img class="logo" src="../assets/icons/icon-48.png" srcset="../assets/icons/icon-128.png 2x" width="34" height="34" alt="" aria-hidden="true">
     <div class="titles">
       <h1>TikTok Tools</h1>
-      <p id="connection" class="connection" role="status" aria-live="polite">Đang kết nối với tab TikTok…</p>
+      <p id="connection" class="connection" role="status" aria-live="polite">Đang kết nối với tab…</p>
     </div>
     <button id="theme" class="icon" type="button" aria-label="Chuyển giao diện sáng/tối" aria-pressed="false">
       <span aria-hidden="true">☀</span>
@@ -84,7 +85,7 @@
       <div class="download">
         <h3>Tải video/âm thanh</h3>
         <div class="url-row">
-          <input id="url" type="url" inputmode="url" placeholder="Dán URL TikTok…" aria-label="URL TikTok"
+          <input id="url" type="url" inputmode="url" placeholder="Dán URL TikTok hoặc Douyin…" aria-label="URL TikTok hoặc Douyin"
                  autocomplete="off" spellcheck="false">
           <button id="analyze" type="button">Phân tích</button>
         </div>
@@ -101,6 +102,6 @@
     </section>
   </main>
 
-  <footer><span id="version">v0.0.2</span> · Tùy chọn được lưu trên máy của bạn.</footer>
+  <footer><span id="version">v0.0.4</span> · Tùy chọn được lưu trên máy của bạn.</footer>
 </body>
 </html>

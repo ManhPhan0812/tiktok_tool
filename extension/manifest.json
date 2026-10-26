@@ -1,15 +1,27 @@
 {
   "manifest_version": 3,
   "name": "TikTok Tools",
-  "version": "0.0.2",
-  "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình và tải video TikTok.",
+  "version": "0.0.4",
+  "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình trên TikTok và Douyin; tải TikTok qua TikWM và Douyin qua Seekin.",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "downloads", "activeTab", "tabCapture", "offscreen"],
+  "permissions": [
+    "storage",
+    "downloads",
+    "activeTab",
+    "tabCapture",
+    "offscreen"
+  ],
+  "optional_host_permissions": [
+    "https://*/*"
+  ],
   "host_permissions": [
     "https://www.tiktok.com/*",
     "https://tiktok.com/*",
+    "https://www.douyin.com/*",
+    "https://douyin.com/*",
     "https://tikwm.com/*",
-    "https://www.tikwm.com/*"
+    "https://www.tikwm.com/*",
+    "https://download.seekin.ai/*"
   ],
   "icons": {
     "16": "assets/icons/icon-16.png",
@@ -17,11 +29,22 @@
     "48": "assets/icons/icon-48.png",
     "128": "assets/icons/icon-128.png"
   },
-  "web_accessible_resources": [{
-    "resources": ["assets/icons/icon-32.png"],
-    "matches": ["https://www.tiktok.com/*", "https://tiktok.com/*"]
-  }],
-  "background": { "service_worker": "background.js" },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/icons/icon-32.png"
+      ],
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://tiktok.com/*",
+        "https://www.douyin.com/*",
+        "https://douyin.com/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "TikTok Tools",
     "default_popup": "popup/popup.html",
@@ -34,27 +57,39 @@
   },
   "commands": {
     "toggle-mirror": {
-      "suggested_key": { "default": "Alt+Shift+H" },
-      "description": "Lật ngang video TikTok đang xem"
+      "suggested_key": {
+        "default": "Alt+Shift+H"
+      },
+      "description": "Lật ngang video đang xem (TikTok hoặc Douyin)"
     }
   },
-  "content_scripts": [{
-    "matches": ["https://www.tiktok.com/*", "https://tiktok.com/*"],
-    "js": [
-      "shared/settings.js",
-      "shared/messages.js",
-      "shared/validation.js",
-      "player/selectors.js",
-      "player/adapter.js",
-      "services/page-state.js",
-      "features/mirror.js",
-      "features/playback-speed.js",
-      "features/clean-mode.js",
-      "features/background-play.js",
-      "features/capture-frame.js",
-      "content.js"
-    ],
-    "css": ["content.css"],
-    "run_at": "document_idle"
-  }]
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.tiktok.com/*",
+        "https://tiktok.com/*",
+        "https://www.douyin.com/*",
+        "https://douyin.com/*"
+      ],
+      "js": [
+        "shared/settings.js",
+        "shared/messages.js",
+        "shared/validation.js",
+        "shared/platform.js",
+        "player/selectors.js",
+        "player/adapter.js",
+        "services/page-state.js",
+        "features/mirror.js",
+        "features/playback-speed.js",
+        "features/clean-mode.js",
+        "features/background-play.js",
+        "features/capture-frame.js",
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

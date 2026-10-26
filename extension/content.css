@@ -11,3 +11,12 @@ html[data-tiktok-tools-clean="1"] [class*="DivVideoProgressContainer"],
 html[data-tiktok-tools-clean="1"] [data-e2e="capcut-tag"] {
   display: none !important;
 }
+
+/* Douyin: ẩn đạn màn hình, dòng khai báo của tác giả và thanh tiến trình.
+   Nút thích/bình luận/lưu/chia sẻ nằm ngoài vùng video nên vẫn hiện. */
+html[data-tiktok-tools-clean="1"] [data-e2e="danmaku-container"],
+html[data-tiktok-tools-clean="1"] [data-e2e="danmaku-container"] .danmu,
+html[data-tiktok-tools-clean="1"] .player-position-box-bottom,
+html[data-tiktok-tools-clean="1"] .xgplayer-progress {
+  display: none !important;
+}

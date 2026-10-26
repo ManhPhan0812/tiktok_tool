@@ -89,6 +89,39 @@ const PAGE_HTML = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><s
   <article id="second"><video id="two"></video></article>
 </main></body></html>`;
 
+// Mô phỏng cấu trúc thật của trang video Douyin (đo trên douyin.com): player xgplayer
+// trong `[data-e2e="player-container"]`, đạn màn hình, dòng khai báo của tác giả,
+// thanh tiến trình và cụm nút thao tác nằm ngoài vùng video.
+const DOUYIN_HTML = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
+  body { margin: 0; background: #161823; color: #fff; font: 16px system-ui; }
+  .basePlayerContainer { position: relative; width: 640px; height: 480px; margin: 24px auto; background: #000; }
+  xg-video-container { display: block; width: 100%; height: 100%; }
+  video { display: block; width: 100%; height: 100%; background: #222; }
+  .xgplayer-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: #fffc; }
+  .player-position-box-bottom { position: absolute; left: 12px; bottom: 24px; font-size: 13px; }
+  [data-e2e="danmaku-container"] { position: absolute; inset: 0 0 auto; padding: 8px; color: #ffd; }
+  .leftContainer { position: absolute; right: 16px; top: 120px; display: flex; flex-direction: column; gap: 12px; }
+  [data-e2e="detail-video-info"] { width: 640px; margin: 0 auto; color: #ccc; }
+</style></head><body>
+<div data-e2e="player-container" class="video_7697907897409228095 video-detail-container newVideoPlayer detailNotFullScreen">
+  <div class="basePlayerContainer xgplayer xgplayer-pc xgplayer-playing">
+    <xg-video-container class="xg-video-container"><video id="dy-one"></video></xg-video-container>
+    <div class="xgplayer-dynamic-bg"></div>
+    <div data-e2e="danmaku-container" class="danmakuContainer"><div class="danmu">弹幕 bay ngang</div></div>
+    <div class="OyvCbdyB player-position-box-bottom">作者声明：内容由 AI 生成</div>
+    <div class="xgplayer-progress"><div class="xgplayer-progress-inner"><div class="xgplayer-progress-played"></div></div></div>
+  </div>
+  <div class="leftContainer">
+    <div data-e2e="video-player-digg" class="likeIcon">赞</div>
+    <div data-e2e="video-player-collect">收藏</div>
+    <div data-e2e="video-player-share">分享</div>
+    <div data-e2e="feed-comment-icon">评论</div>
+  </div>
+  <div data-e2e="detail-video-info" data-e2e-aweme-id="7697907897409228095">P1 置顶视频</div>
+</div>
+<div data-e2e="comment-list"><div class="comment-item">Bình luận thử</div></div>
+</body></html>`;
+
 async function launch({ routePage = true, browserArgs = [] } = {}) {
   const profile = await fs.mkdtemp(path.join(os.tmpdir(), "tiktok-tools-test-"));
   const downloadDir = path.join(profile, "downloads");
@@ -125,6 +158,12 @@ async function launch({ routePage = true, browserArgs = [] } = {}) {
     await context.route("https://www.tiktok.com/**", route => {
       if (route.request().resourceType() === "document") {
         return route.fulfill({ contentType: "text/html", body: PAGE_HTML });
+      }
+      return route.abort();
+    });
+    await context.route("https://www.douyin.com/**", route => {
+      if (route.request().resourceType() === "document") {
+        return route.fulfill({ contentType: "text/html", body: DOUYIN_HTML });
       }
       return route.abort();
     });
@@ -174,6 +213,13 @@ async function dispose(harness) {
 async function openTikTok(harness, pathname = "/foryou") {
   const page = await harness.context.newPage();
   await page.goto(`https://www.tiktok.com${pathname}`);
+  await expect(page.locator("#tiktok-tools-control")).toBeVisible();
+  return page;
+}
+
+async function openDouyin(harness, pathname = "/video/7697907897409228095") {
+  const page = await harness.context.newPage();
+  await page.goto(`https://www.douyin.com${pathname}`);
   await expect(page.locator("#tiktok-tools-control")).toBeVisible();
   return page;
 }
@@ -234,10 +280,10 @@ async function useCanvasVideo(page, selector = "#one", { width = 320, height = 2
     video.muted = true;
     await video.play().catch(() => {});
   }, { width, height });
-  await page.waitForFunction(() => {
-    const video = document.querySelector("#one");
-    return video.videoWidth > 0 && video.readyState >= 2;
-  }, { timeout: 10_000 });
+  await page.waitForFunction(selector => {
+    const video = document.querySelector(selector);
+    return Boolean(video) && video.videoWidth > 0 && video.readyState >= 2;
+  }, selector, { timeout: 10_000 });
 }
 
 async function useEnhancedPlayer(page) {
@@ -334,6 +380,74 @@ async function proxyCalls(harness) {
   return harness.worker.evaluate(() => self.__proxyCalls || []);
 }
 
+// Hình dạng trả về của máy chủ tải Douyin (giống API seekin.ai mà người dùng đã đo):
+// 1080p bị khoá, 720p/540p có link.
+const DOUYIN_PAYLOAD = {
+  code: "0000",
+  msg: "请求成功",
+  data: {
+    title: "非洲草原超级杯",
+    imageUrl: "https://p95.douyinpic.test/cover.jpeg",
+    duration: null,
+    medias: [
+      { url: null, quality: "1080p", locked: true, format: "1080p (13.30 MB) [.mp4]", fileSize: 13943633, sizeStr: "13.30 MB" },
+      { url: "https://v26-kefu.douyinvod.test/video/720.mp4", quality: "720p", locked: false, format: "720p (10.08 MB) [.mp4]", fileSize: 10567934, sizeStr: "10.08 MB" },
+      { url: "https://v26-kefu.douyinvod.test/video/540.mp4", quality: "540p", locked: false, format: "540p (10.15 MB) [.mp4]", fileSize: 10642817, sizeStr: "10.15 MB" }
+    ],
+    images: [],
+    hdLifetime: false
+  }
+};
+
+async function stubDouyin(harness, {
+  payload = DOUYIN_PAYLOAD,
+  status = 200,
+  body = null,
+  endpoint = "https://proxy.test/ikool/media/download",
+  token = "test-token"
+} = {}) {
+  await harness.worker.evaluate(async ({ payload, status, body, endpoint, token }) => {
+    if (!self.__originalFetch) self.__originalFetch = self.fetch;
+    if (!self.__originalContains) self.__originalContains = chrome.permissions.contains;
+    self.__douyinCalls = [];
+    TikTokTools.douyinService.clearCache();
+    // Trong kiểm thử coi như người dùng đã cấp quyền cho endpoint giả.
+    chrome.permissions.contains = async () => true;
+    self.fetch = async (url, init) => {
+      self.__douyinCalls.push({
+        url: String(url),
+        method: init?.method || null,
+        body: init?.body ? String(init.body) : null,
+        headers: init?.headers || null,
+        credentials: init?.credentials || null
+      });
+      return new Response(body || JSON.stringify(payload), {
+        status,
+        headers: { "content-type": "application/json" }
+      });
+    };
+    await chrome.storage.local.remove([TikTokTools.douyinService.ENDPOINT_KEY, TikTokTools.douyinService.TOKEN_KEY]);
+    if (endpoint) await chrome.storage.local.set({
+      [TikTokTools.douyinService.ENDPOINT_KEY]: endpoint,
+      [TikTokTools.douyinService.TOKEN_KEY]: token
+    });
+  }, { payload, status, body, endpoint, token });
+}
+
+async function douyinCalls(harness) {
+  return harness.worker.evaluate(() => self.__douyinCalls || []);
+}
+
+async function resetDouyin(harness) {
+  await harness.worker.evaluate(async () => {
+    if (self.__originalFetch) self.fetch = self.__originalFetch;
+    if (self.__originalContains) chrome.permissions.contains = self.__originalContains;
+    self.__douyinCalls = [];
+    TikTokTools.douyinService.clearCache();
+    await chrome.storage.local.remove([TikTokTools.douyinService.ENDPOINT_KEY, TikTokTools.douyinService.TOKEN_KEY]);
+  });
+}
+
 async function resetProxy(harness) {
   await harness.worker.evaluate(() => {
     if (self.__originalFetch) self.fetch = self.__originalFetch;
@@ -379,10 +493,12 @@ async function cancelJobs(harness) {
 
 module.exports = {
   PAGE_HTML,
+  DOUYIN_HTML,
   marked,
   launch,
   dispose,
   openTikTok,
+  openDouyin,
   openPopup,
   resetStorage,
   send,
@@ -400,6 +516,10 @@ module.exports = {
   PROXY_PAYLOAD,
   proxyCalls,
   resetProxy,
+  stubDouyin,
+  DOUYIN_PAYLOAD,
+  douyinCalls,
+  resetDouyin,
   lastDownload,
   cancelJobs
 };

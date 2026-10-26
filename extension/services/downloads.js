@@ -158,6 +158,8 @@
         return "Chỉ hỗ trợ link thuộc tiktok.com.";
       case "INVALID_PATH":
         return "Link này không phải link video TikTok. Ví dụ đúng: https://www.tiktok.com/@user/video/123.";
+      case "UNSUPPORTED_PLATFORM":
+        return "Link Douyin được xử lý ở mục tải Douyin riêng và cần cấu hình máy chủ (xem docs/DOUYIN-DOWNLOAD.md).";
       default:
         return "Không phân tích được URL này.";
     }

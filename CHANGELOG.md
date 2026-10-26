@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.0.4 — 2026-10-26
+
+### Thêm
+
+- **Hỗ trợ Douyin** (`douyin.com`) cho các tính năng xem: lật ngang, đổi tốc độ, Clean Mode, phát nền, chụp khung hình và Equalizer. Luồng TikTok giữ nguyên hành vi.
+- `shared/platform.js`: hồ sơ nền tảng (host, URL chuẩn, lớp renderer, tiền tố tên tệp) để thêm nền tảng mới mà không sửa từng tính năng.
+- `tests/douyin.spec.js`: 7 bài chạy trên fixture dựng theo cấu trúc DOM đo được của `douyin.com/video/<id>`.
+- **Tải video Douyin**: mặc định gọi seekin.ai với chữ ký HMAC sinh tại máy (`services/seekin.js`), không gửi cookie/token đăng nhập (`credentials: "omit"`); đổi được sang endpoint riêng qua `douyinEndpoint`/`douyinToken`. Hàng tải giữ đúng trạng thái `locked`: bản 1080p hiện lý do khoá và không bấm được, không tạo lựa chọn giả. Chi tiết: [docs/DOUYIN-DOWNLOAD.md](docs/DOUYIN-DOWNLOAD.md).
+
+### Thay đổi
+
+- `player/selectors.js` thành bộ selector theo nền tảng; Douyin dùng `xgplayer` và không có renderer canvas riêng nên chỉ lật `<video>`.
+- Clean Mode trên Douyin ẩn đạn màn hình, dòng khai báo của tác giả và thanh tiến trình; giữ nút thích/bình luận/lưu/chia sẻ.
+- Tên tệp chụp trên Douyin có tiền tố `douyin_`; popup hiện "Đã kết nối tab Douyin"/"tab TikTok" theo trang đang mở.
+- Link Douyin được báo `UNSUPPORTED_PLATFORM` ("Chưa hỗ trợ tải video Douyin…") thay vì "Chỉ hỗ trợ link thuộc tiktok.com".
+
+### Giới hạn
+
+- Tải Douyin phụ thuộc dịch vụ bên thứ ba: seekin.ai có thể đổi API, chặn hoặc tính phí bất cứ lúc nào; bản 1080p thường bị khoá sau tài khoản trả phí. Link CDN hết hạn nhanh nên chỉ cache 60 giây.
+- Douyin trả captcha cho traffic ngoài Trung Quốc và cho trình duyệt tự động; khi trang không tải được thì extension không có gì để điều khiển. Đã đo: `www.douyin.com/` trả `验证码中间页`, còn `/jingxuan` và `/video/<id>` lúc mở được lúc không.
+
+### Kiểm thử
+
+- 82 bài (71 bài cũ + 11 bài Douyin tải). Fixture Douyin mô phỏng `xg-video-container`, `.basePlayerContainer.xgplayer`, `danmaku-container`, `.player-position-box-bottom`, `.xgplayer-progress` và cụm nút `data-e2e`.
+
 ## 0.0.2 — 2026-10-23
 
 ### Sửa lỗi

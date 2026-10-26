@@ -1,6 +1,30 @@
 # TikTok Tools
 
-Extension cho Chrome/Edge trên máy tính: lật ngang video, điều khiển phát, ẩn lớp thông tin, phát nền, chụp khung hình và tải video TikTok đang xem hoặc từ link được dán.
+Extension cho Chrome/Edge trên máy tính: lật ngang video, điều khiển phát, ẩn lớp thông tin, phát nền và chụp khung hình trên **TikTok và Douyin**; tải video TikTok đang xem hoặc từ link được dán.
+
+## Hỗ trợ Douyin 0.0.4
+
+Các tính năng xem chạy được trên `douyin.com` bên cạnh `tiktok.com`, dùng chung một bộ mã:
+
+| Tính năng | TikTok | Douyin |
+| --- | --- | --- |
+| Lật ngang video | Có | Có |
+| Đổi tốc độ 0,5×–4× | Có | Có |
+| Clean Mode | Có | Có (ẩn đạn màn hình, dòng khai báo của tác giả, thanh tiến trình) |
+| Phát nền | Có | Có |
+| Chụp khung hình | Có | Có |
+| Equalizer | Có (thử nghiệm) | Có (thử nghiệm) |
+| Tải video | Có (qua tikwm.com) | Có — mặc định qua **seekin.ai**, đổi được sang endpoint riêng — [docs/DOUYIN-DOWNLOAD.md](docs/DOUYIN-DOWNLOAD.md); bản 1080p tuỳ tài khoản dịch vụ |
+
+Ba điều cần biết trước khi dùng trên Douyin:
+
+- **Douyin chặn truy cập tự động.** Trong lúc kiểm tra từ Việt Nam, `https://www.douyin.com/` trả về trang `验证码中间页` (captcha); trang `/jingxuan` và trang `/video/<id>` lúc mở được lúc không. Nếu trang không tải được thì extension cũng không có gì để điều khiển — đây là giới hạn của Douyin, không phải lỗi extension.
+- Một số video cần đăng nhập mới xem; extension chỉ đọc `<video>` đang có trên trang, không gửi cookie hay tài khoản đi đâu.
+- Tên tệp chụp trên Douyin có tiền tố `douyin_` thay vì `tiktok_` để phân biệt nguồn.
+
+Kỹ thuật: thêm `shared/platform.js` (hồ sơ nền tảng: host, URL chuẩn, lớp renderer), `player/selectors.js` thành bộ selector theo nền tảng, và `content.css` thêm quy tắc Clean Mode cho `xgplayer`. Phần chọn `<video>`, tính điểm, tốc độ, chụp khung hình dùng chung nên TikTok không đổi hành vi.
+
+Tải Douyin nằm trong `services/douyin.js` + `services/seekin.js`: mặc định gọi seekin.ai với chữ ký HMAC sinh tại máy, hoặc gọi endpoint riêng nếu bạn đặt `douyinEndpoint`. Request đặt `credentials: "omit"` — không gửi cookie hay token đăng nhập, chỉ gửi đúng link bạn dán. Chi tiết và cách đổi endpoint: [docs/DOUYIN-DOWNLOAD.md](docs/DOUYIN-DOWNLOAD.md). Lý do phải qua dịch vụ: player Douyin trên web PC dùng DASH, `<video>` là `blob:`, video/audio là hai luồng riêng, không có mp4 nguyên khối để tải.
 
 ## Bản sửa Equalizer 0.0.2
 
@@ -16,7 +40,7 @@ Sau khi cập nhật, mở `chrome://extensions`, nhấn **Tải lại** TikTok 
 
 Đây là release đầu tiên, bao gồm toàn bộ chức năng của bản thử nghiệm nội bộ 0.2.2. Số phiên bản trong manifest, popup và package được thống nhất thành **0.0.1**; không hạ cấp chức năng và không xóa tùy chọn đã lưu. Các mốc 0.1.x/0.2.x trong PLAN và tài liệu khảo sát là lịch sử phát triển nội bộ.
 
-Logo [TikTok Aesthetic Brown](https://www.iconpacks.net/free-icon/tiktok-aesthetic-brown-23190.html) được đóng gói cục bộ và dùng thống nhất cho thanh công cụ, popup và nút nổi. Bộ kiểm thử gồm **64 bài**; EQ đã được kiểm tra đáp ứng bằng âm tổng hợp nhưng chất lượng nghe trên loa/tai nghe thật vẫn cần thử.
+Logo [TikTok Aesthetic Brown](https://www.iconpacks.net/free-icon/tiktok-aesthetic-brown-23190.html) được đóng gói cục bộ và dùng thống nhất cho thanh công cụ, popup và nút nổi. Bộ kiểm thử gồm **82 bài**; EQ đã được kiểm tra đáp ứng bằng âm tổng hợp nhưng chất lượng nghe trên loa/tai nghe thật vẫn cần thử.
 
 ## Trạng thái tính năng
 
@@ -134,7 +158,7 @@ $env:TIKTOK_TOOLS_BROWSER_PATH = 'C:\Program Files (x86)\Microsoft\Edge\Applicat
 npm test
 ```
 
-64 bài kiểm thử, chia theo tính năng:
+82 bài kiểm thử, chia theo tính năng:
 
 - `tests/mirror.spec.js` — lật/khôi phục, transform của TikTok, cuộn feed, video tái sử dụng, chế độ tự lật, fullscreen, trình phát canvas.
 - `tests/playback.spec.js` — tốc độ, Clean Mode, Background Play (chuyển tab thật với focus emulation tắt).

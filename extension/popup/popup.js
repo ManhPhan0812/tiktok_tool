@@ -72,7 +72,10 @@
       throw Object.assign(new Error("Tiện ích không phản hồi kịp."), { code: "NO_RESPONSE" });
     }
     if (!response.ok) {
-      throw Object.assign(new Error(response.error.message), { code: response.error.code });
+      throw Object.assign(new Error(response.error.message), {
+        code: response.error.code,
+        origin: response.error.origin
+      });
     }
     return response.data;
   }
@@ -178,10 +181,15 @@
     }
   }
 
+  function platformLabel(data) {
+    const profile = TikTokTools.platform?.forUrl(data?.url || "");
+    return profile ? profile.label : "TikTok";
+  }
+
   function renderStatus(data) {
     status = data;
     const available = Boolean(data?.available);
-    el.connection.textContent = "Đã kết nối tab TikTok";
+    el.connection.textContent = `Đã kết nối tab ${platformLabel(data)}`;
     el.connection.dataset.state = "ok";
     el.videoChip.textContent = available ? "Đang xem video" : "Chưa thấy video";
     el.videoChip.dataset.state = available ? "ok" : "warn";
@@ -207,7 +215,7 @@
 
   function renderDisconnected() {
     status = null;
-    el.connection.textContent = "Chưa kết nối. Mở TikTok và mở lại công cụ.";
+    el.connection.textContent = "Chưa kết nối. Mở TikTok hoặc Douyin rồi mở lại công cụ.";
     el.connection.dataset.state = "warn";
     el.videoChip.textContent = "Chưa có video";
     el.videoChip.dataset.state = "warn";
@@ -217,7 +225,7 @@
     el.useCurrent.hidden = true;
     setControlsEnabled(false);
     el.eq.disabled = true;
-    el.eqNote.textContent = "Cần tab TikTok để bật";
+    el.eqNote.textContent = "Cần tab TikTok hoặc Douyin để bật";
   }
 
   async function poll() {
@@ -380,6 +388,100 @@
     }
   }
 
+  // Douyin: các bản do máy chủ trả về (1080p/720p/540p…), không dùng bốn khoá của
+  // TikTok vì ý nghĩa khác nhau. Bản bị khoá hiện lý do thay vì giả vờ tải được.
+  function renderDouyin(data) {
+    resolved = data;
+    el.downloadResult.hidden = false;
+    el.downloadNote.hidden = true;
+    const parts = ["Douyin"];
+    if (data.provider) parts.push(`qua ${data.provider}`);
+    if (data.videoId) parts.push(data.videoId);
+    parts.push(`${data.availableCount} bản tải được`);
+    if (data.title) parts.push(String(data.title).slice(0, 60));
+    el.downloadMeta.textContent = parts.join(" · ");
+    el.downloadRows.replaceChildren();
+    for (const row of data.rows || []) {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "row-download" + (row.key === data.defaultVariant ? " primary" : "");
+      button.dataset.variant = row.key;
+      const name = document.createElement("span");
+      name.textContent = row.available ? row.label : `${row.label} (khoá)`;
+      const detail = document.createElement("span");
+      detail.className = "detail";
+      if (row.available) {
+        detail.textContent = [row.sizeStr || ns.validation.formatBytes(row.sizeBytes), `qua ${data.provider || "máy chủ"}`]
+          .filter(Boolean).join(" · ");
+        button.addEventListener("click", () => startDouyinDownload(row.key));
+      } else {
+        button.disabled = true;
+        detail.className = "detail reason";
+        detail.textContent = row.note || "Không có link tải.";
+        button.title = detail.textContent;
+      }
+      button.append(name, detail);
+      item.append(button);
+      el.downloadRows.append(item);
+    }
+  }
+
+  async function startDouyinDownload(variant) {
+    if (!resolved) return;
+    showError("");
+    showNotice("");
+    el.downloadProgress.hidden = false;
+    el.downloadProgress.textContent = "Đang bắt đầu tải…";
+    try {
+      const job = await request(types.DOUYIN_DOWNLOAD, {
+        url: el.url.value.trim(),
+        variant,
+        videoId: resolved.videoId
+      });
+      watchDouyinDownload(job.downloadId, variant);
+    } catch (error) {
+      el.downloadProgress.hidden = true;
+      showError(error.message);
+    }
+  }
+
+  // Tải Douyin đi thẳng qua chrome.downloads (link CDN của máy chủ), nên theo dõi bằng
+  // chính API đó thay vì hàng đợi job của luồng TikTok.
+  function watchDouyinDownload(downloadId, variant) {
+    clearInterval(jobTimer);
+    const label = resolved?.rows?.find(row => row.key === variant)?.label || "video";
+    jobTimer = setInterval(async () => {
+      try {
+        const [item] = await chrome.downloads.search({ id: downloadId });
+        if (!item) {
+          clearInterval(jobTimer);
+          el.downloadProgress.hidden = true;
+          return;
+        }
+        if (item.state === "complete") {
+          clearInterval(jobTimer);
+          el.downloadProgress.hidden = true;
+          const saved = String(item.filename || "").split(/[\\/]/).pop();
+          showNotice(`Đã lưu ${saved || label}`);
+          return;
+        }
+        if (item.state === "interrupted") {
+          clearInterval(jobTimer);
+          el.downloadProgress.hidden = true;
+          showError("Tải Douyin thất bại: link CDN có thể đã hết hạn, bấm Phân tích lại rồi tải ngay.");
+          return;
+        }
+        const received = ns.validation.formatBytes(item.bytesReceived);
+        const total = ns.validation.formatBytes(item.totalBytes);
+        el.downloadProgress.textContent = `Đang tải ${label}${received ? ` · ${received}` : ""}${total ? ` / ${total}` : ""}…`;
+      } catch {
+        clearInterval(jobTimer);
+        el.downloadProgress.hidden = true;
+      }
+    }, 600);
+  }
+
   async function startDownload(variant) {
     if (!resolved) return;
     showError("");
@@ -444,25 +546,46 @@
   async function analyze() {
     if (el.analyze.disabled) return;
     const url = el.url.value.trim();
+    const isDouyin = ns.validation.isDouyinUrl(url);
     if (!url) {
-      showError("Hãy dán URL TikTok trước khi phân tích.");
+      showError("Hãy dán URL TikTok hoặc Douyin trước khi phân tích.");
       return;
     }
     const revision = ++analysisRevision;
     resolved = null;
     el.downloadResult.hidden = true;
     el.downloadNote.hidden = false;
-    el.downloadNote.textContent = "Đang lấy liên kết tải từ TikWM…";
+    el.downloadNote.textContent = isDouyin
+      ? "Đang phân tích Douyin qua dịch vụ tải…"
+      : "Đang lấy liên kết tải từ TikWM…";
     el.downloadProgress.hidden = true;
     el.analyze.disabled = true;
     el.analyze.textContent = "Đang phân tích…";
     el.analyze.setAttribute("aria-busy", "true");
     showError("");
     showNotice("");
+    const loadData = () => (isDouyin
+      ? request(types.DOUYIN_ANALYZE, { url })
+      : request(types.DOWNLOAD_RESOLVE, { url }));
     try {
-      const data = await request(types.DOWNLOAD_RESOLVE, { url });
+      let data;
+      try {
+        data = await loadData();
+      } catch (error) {
+        // Endpoint tải Douyin do người dùng đặt nằm ngoài host_permissions: xin quyền
+        // theo đúng origin đó một lần rồi thử lại, không xin quyền cho mọi trang.
+        if (error.code !== "PERMISSION_REQUIRED" || !error.origin) throw error;
+        const granted = await chrome.permissions
+          .request({ origins: [`${error.origin}/*`] })
+          .catch(() => false);
+        if (!granted) {
+          throw Object.assign(new Error(`Chưa được cấp quyền truy cập ${error.origin}.`), { code: "PERMISSION_REQUIRED" });
+        }
+        el.downloadNote.textContent = "Đã cấp quyền, đang gọi lại máy chủ tải Douyin…";
+        data = await loadData();
+      }
       if (revision !== analysisRevision) return;
-      renderDownload(data);
+      if (isDouyin) renderDouyin(data); else renderDownload(data);
     } catch (error) {
       if (revision !== analysisRevision) return;
       resolved = null;

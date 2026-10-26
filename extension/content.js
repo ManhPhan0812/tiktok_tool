@@ -149,7 +149,7 @@
     const now = new Date();
     const pad = value => String(value).padStart(2, "0");
     const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    return `tiktok_${id}_${stamp}_${suffix}.png`;
+    return `${ns.platform.current().filePrefix}_${id}_${stamp}_${suffix}.png`;
   }
 
   // Tên tệp của thẻ <a download> được trình duyệt tôn trọng, khác với data: URL
@@ -207,6 +207,12 @@
         return true;
       }
       case types.RESOLVE_VIDEO: {
+        // Dữ liệu dựng sẵn để tải (`__UNIVERSAL_DATA_FOR_REHYDRATION__`) chỉ có trên
+        // TikTok; Douyin để phần tải lại sau nên báo đúng lý do thay vì "không thấy".
+        if (ns.platform.current().id !== "tiktok") {
+          sendResponse(msg.fail("UNSUPPORTED_PLATFORM", "Chưa hỗ trợ tải video Douyin. Các tính năng xem vẫn dùng được."));
+          return true;
+        }
         const wanted = payload.videoId || player.videoId();
         const info = wanted ? ns.pageState.describe(wanted) : null;
         if (!info) {
@@ -231,7 +237,7 @@
     if (records.some(record => {
       if (record.target === host) return false;
       if (record.type === "childList" || record.attributeName === "src") return true;
-      return record.target.matches?.("video") || record.target.closest?.("tt-vod-sr-wrap")
+      return record.target.matches?.("video") || record.target.closest?.("tt-vod-sr-wrap, .xgplayer, [data-e2e=\"player-container\"]")
         || Boolean(record.target.querySelector?.("video"));
     })) schedule();
   });

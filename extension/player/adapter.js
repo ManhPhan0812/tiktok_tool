@@ -1,7 +1,8 @@
 (() => {
   "use strict";
   const ns = globalThis.TikTokTools = globalThis.TikTokTools || {};
-  const selectors = ns.selectors;
+  const platform = ns.platform.current();
+  const selectors = ns.selectorsFor(platform.id);
 
   function mediaElements(root = document) {
     return [...root.querySelectorAll("video")];
@@ -9,9 +10,11 @@
 
   // TikTok có thể vẽ khung hình lên canvas trong `tt-vod-sr-wrap` bên cạnh <video>.
   // Renderer là các phần tử hiển thị thật sự; không gồm controls hay canvas khác.
+  // Douyin không có lớp này (`renderer` là null) nên chỉ lật chính <video>.
   function renderTargets(video) {
-    const wrappers = [...(video.parentElement?.children ?? [])]
-      .filter(element => element.matches(selectors.renderer));
+    const wrappers = selectors.renderer
+      ? [...(video.parentElement?.children ?? [])].filter(element => element.matches(selectors.renderer))
+      : [];
     return [video, ...wrappers];
   }
 
@@ -71,20 +74,15 @@
   }
 
   function videoId() {
-    const match = location.pathname.match(/\/video\/(\d{6,25})/);
-    return match ? match[1] : null;
+    return ns.platform.videoIdFromPath(location.pathname);
   }
 
   function author() {
-    const match = location.pathname.match(/^\/@([^/]+)/);
-    return match ? decodeURIComponent(match[1]) : null;
+    return ns.platform.authorFromPath(location.pathname);
   }
 
   function canonicalUrl() {
-    const id = videoId();
-    if (!id) return null;
-    const name = author();
-    return name ? `https://www.tiktok.com/@${name}/video/${id}` : `https://www.tiktok.com/video/${id}`;
+    return ns.platform.canonicalVideoUrl(videoId(), author());
   }
 
   ns.player = Object.freeze({

@@ -1,5 +1,39 @@
 # Trạng thái theo PLAN.md
 
+## Hỗ trợ Douyin 0.0.4 — 26/10/2026
+
+**Mục tiêu:** các tính năng xem chạy được trên `douyin.com` mà luồng TikTok không đổi hành vi. Tải video Douyin để sau (người dùng sẽ mô tả riêng).
+
+**Đo trước khi sửa, trên trang thật (Edge, hồ sơ sạch):**
+
+- `https://www.douyin.com/` trả về `验证码中间页` (captcha), body 4 ký tự; `/discover` chuyển sang `/jingxuan`, có lúc tải được feed nhưng video không tự phát.
+- `https://www.douyin.com/video/7697907897409228095` phát được: `<video>` 1280×720 nằm trong `xg-video-container` → `.basePlayerContainer.xgplayer` → `[data-e2e="player-container"]`; không nằm trong shadow DOM.
+- Đo trực tiếp trên trang đó: `playbackRate = 2` **giữ nguyên** sau 2,5 s, `transform: scaleX(-1)` áp được (`matrix(-1, 0, 0, 1, 0, 0)`), và `drawImage(video)` + `getImageData` **không bị taint** → lật, tốc độ và chụp khung hình khả thi.
+- `data-e2e` có nhưng khác bộ TikTok: `player-container`, `danmaku-container`, `video-player-digg`, `feed-comment-icon`, `video-player-collect`, `video-player-share`, `detail-video-info`. Không có `tt-vod-sr-wrap`, `DivBasicPlayerWrapper` hay `data-e2e="feed-video"`.
+
+**Thay đổi:**
+
+1. `shared/platform.js` (mới): hồ sơ nền tảng gồm host, `filePrefix`, `renderer`, mẫu URL video và hàm dựng URL chuẩn. Danh sách host lấy từ `validation.hostPatterns` để chỉ có một nguồn.
+2. `manifest.json`: thêm `https://www.douyin.com/*`, `https://douyin.com/*` vào `content_scripts.matches`, `host_permissions` và `web_accessible_resources`; nạp `shared/platform.js` trước `player/selectors.js`.
+3. `player/selectors.js`: thành `selectorSets` theo nền tảng + `selectorsFor(id)`. Douyin: `renderer: null` (khung hình nằm trong `<video>`), `cleanTargets` là đạn màn hình, `.player-position-box-bottom`, `.xgplayer-progress`; `keepTargets` là cụm nút thao tác và `comment-list`.
+4. `player/adapter.js`: lấy `renderer` theo nền tảng, `videoId()`, `author()`, `canonicalUrl()` dùng `ns.platform` (`https://www.douyin.com/video/<id>` cho Douyin).
+5. `content.css`: thêm quy tắc Clean Mode cho Douyin (`danmaku-container`, `.danmu`, `.player-position-box-bottom`, `.xgplayer-progress`); ẩn đúng lớp phủ, không đụng nút thao tác/bình luận.
+6. `content.js`: tên tệp chụp dùng `platform.filePrefix` (`douyin_…`), MutationObserver theo dõi cả `.xgplayer`/`[data-e2e="player-container"]`, `RESOLVE_VIDEO` trả `UNSUPPORTED_PLATFORM` trên Douyin thay vì `NO_SOURCE` mơ hồ.
+7. `validation.js`: thêm `isDouyinUrl`, `isSupportedTabUrl`, `hostPatterns`; link Douyin trả `UNSUPPORTED_PLATFORM` để popup nói đúng lý do.
+8. `popup.js` + `background.js`: nhãn "Đã kết nối tab <nền tảng>", hướng dẫn "Mở TikTok hoặc Douyin…", `eqNote` "Cần tab TikTok hoặc Douyin để bật", thông báo `NO_RECEIVER` gọn cho cả hai nền tảng.
+
+**Kiểm chứng:** thêm `tests/douyin.spec.js` (7 bài) chạy trên fixture dựng theo đúng cấu trúc đo được: content script chạy và đọc đúng `videoId`/`canonicalUrl`; lật chỉ đụng `<video>` và khôi phục nguyên trạng; tốc độ áp dụng và theo tùy chọn đã lưu; Clean Mode ẩn đạn màn hình/khai báo/tiến trình nhưng giữ nút thao tác và bình luận; chụp PNG 320×240 tên `douyin_…_khung-hinh.png`; popup nhận đúng nền tảng và điều khiển được; link Douyin vào ô phân tích được định tuyến sang luồng tải Douyin.
+
+**Tải Douyin (cùng bản 0.0.4):** đo trên trang thật cho thấy không có mp4 nguyên khối để lấy — `<video>` là `blob:` (MSE) và player tải riêng `media-video-avc1` + `media-audio-und-mp4a`; curl thẳng bị chặn bằng shell JS `_$jsvmprt`; `window.SSR_RENDER_DATA` (134 KB) không có `play_addr`; `iesdouyin.com/share/video/<id>` chỉ là app shell. Vì vậy `services/douyin.js` + `services/seekin.js` gọi seekin.ai: `POST /ikool/media/download` với `{"url": "<link Douyin>"}` và header `lang`/`timestamp`/`nonce`/`sign` sinh tại máy (HMAC-SHA256, có khoá epoch theo `timestamp/10000`), `credentials: "omit"` và không gửi `authorization`. Giữ đúng trạng thái `locked` máy chủ trả về và tải link CDN bằng `chrome.downloads`. API này trả 1080p `locked: true` không có link, 720p 10,08 MB, 540p 10,15 MB. Endpoint riêng vẫn đặt được qua `douyinEndpoint`/`douyinToken`. Hợp đồng và chính sách dữ liệu: [docs/DOUYIN-DOWNLOAD.md](DOUYIN-DOWNLOAD.md).
+
+**Kiểm chứng tải:** `tests/douyin-download.spec.js` (11 bài) phủ bốn dạng link Douyin (`/video/`, `?modal_id=`, `iesdouyin/share`, `v.douyin.com`), từ chối host/path khác, mặc định gọi Seekin với chữ ký mới và không gửi token cũ, **chữ ký sinh ra khớp đúng `sign` của curl mẫu thật** (`a18a96ed…` với cùng `timestamp`/`nonce`) và đổi theo nội dung, từ chối ký cho host khác, `PERMISSION_REQUIRED` khi chưa cấp quyền origin, máy chủ báo `1001` → `UPSTREAM`, `5016` của Seekin → thông báo thử lại, chỉ có bản khoá → `NO_SOURCE`, popup hiện `1080p (khoá)` bị disable và 720p là lựa chọn chính, bấm tải gọi `chrome.downloads` với `Douyin/<id>_720p.mp4`.
+
+Kết quả: **82/82 bài kiểm thử đạt** trên Edge. Toàn bộ 71 bài của bản xem-Douyin (gồm 64 bài TikTok cũ) vẫn xanh.
+
+**Chưa kiểm chứng / giới hạn:** chưa gọi seekin.ai thật *từ extension* — mới stub `fetch` và đối chiếu chữ ký với curl mẫu (curl đó đã trả dữ liệu thật, nên thuật toán ký là đúng, nhưng chưa xác nhận được quyền truy cập origin `download.seekin.ai` khi chạy thật); chữ ký dựa trên tham số web-client quan sát từ frontend của họ nên có thể hỏng khi họ đổi; URL CDN Douyin hết hạn nhanh nên cache chỉ 60 giây; chưa thử trên phiên Douyin có đăng nhập; chưa thử chế độ toàn màn hình của `xgplayer`.
+
+**Kiểm chứng trên trang thật:** viết `test-results/probe-douyin-live.cjs` nạp chính thư mục `extension/` vào Edge headless rồi mở `https://www.douyin.com/video/7697907897409228095`. Kết quả: content script chạy (nút nổi hiện), video 1280×720 đang phát, bấm nút nổi thì `<video>` nhận `data-tiktok-tools-mirrored` và `transform` thành `matrix(-1, 0, 0, 1, 0, 0)` — đúng hành vi mong đợi trên DOM thật, không chỉ fixture.
+
 ## Sửa Equalizer 0.0.2 — 23/10/2026
 
 **Triệu chứng được xác nhận:** chọn Bass/Vocal/Treble nhưng ô hiện “Không phản hồi · đang thử lại” rồi tự trở về Tắt.

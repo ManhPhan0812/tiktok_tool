@@ -1,5 +1,5 @@
 "use strict";
-importScripts("shared/settings.js", "shared/messages.js", "shared/validation.js", "services/proxy.js", "services/downloads.js");
+importScripts("shared/settings.js", "shared/messages.js", "shared/validation.js", "shared/platform.js", "services/proxy.js", "services/downloads.js", "services/seekin.js", "services/douyin.js");
 
 const ns = TikTokTools;
 const msg = ns.messages;
@@ -39,9 +39,9 @@ async function forwardToTab(type, payload, tabId, requestId) {
     const response = await chrome.tabs.sendMessage(id, { type, payload, requestId });
     return msg.isResponse(response)
       ? response
-      : msg.fail("NO_RECEIVER", "Tiện ích chưa chạy trên tab này. Hãy tải lại trang TikTok.");
+      : msg.fail("NO_RECEIVER", "Tiện ích chưa chạy trên tab này. Hãy tải lại trang TikTok hoặc Douyin.");
   } catch {
-    return msg.fail("NO_RECEIVER", "Tiện ích chưa chạy trên tab này. Hãy tải lại trang TikTok.");
+    return msg.fail("NO_RECEIVER", "Tiện ích chưa chạy trên tab này. Hãy tải lại trang TikTok hoặc Douyin.");
   }
 }
 
@@ -278,6 +278,10 @@ async function handle(message, sender) {
       return ns.downloadsService.status();
     case types.DOWNLOAD_CANCEL:
       return ns.downloadsService.cancel(payload);
+    case types.DOUYIN_ANALYZE:
+      return ns.douyinService.analyze(payload);
+    case types.DOUYIN_DOWNLOAD:
+      return ns.douyinService.download(payload);
     case types.EQ_START:
       return queueEq(() => eqStart(payload));
     case types.EQ_SET_PRESET:
