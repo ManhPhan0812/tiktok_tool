@@ -43,6 +43,15 @@
         "https://www.douyin.com/*",
         "https://douyin.com/*"
       ]
+    },
+    {
+      "resources": [
+        "services/douyin-page-hook.js"
+      ],
+      "matches": [
+        "https://www.douyin.com/*",
+        "https://douyin.com/*"
+      ]
     }
   ],
   "background": {
@@ -82,6 +91,7 @@
         "player/selectors.js",
         "player/adapter.js",
         "services/page-state.js",
+        "services/douyin-page.js",
         "features/mirror.js",
         "features/playback-speed.js",
         "features/clean-mode.js",

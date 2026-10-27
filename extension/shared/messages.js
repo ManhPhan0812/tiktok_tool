@@ -22,6 +22,8 @@
     // Douyin download (qua máy chủ người dùng cấu hình)
     DOUYIN_ANALYZE: "DOUYIN_ANALYZE",
     DOUYIN_DOWNLOAD: "DOUYIN_DOWNLOAD",
+    // Douyin: bắt link từ chính trang đang mở (content script)
+    DOUYIN_PAGE_CAPTURE: "DOUYIN_PAGE_CAPTURE",
     // Equalizer
     EQ_START: "EQ_START",
     EQ_SET_PRESET: "EQ_SET_PRESET",

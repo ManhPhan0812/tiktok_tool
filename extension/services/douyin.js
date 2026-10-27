@@ -209,10 +209,65 @@
     return data;
   }
 
+  // Hỏi content script của tab đang mở: nó bắt link từ chính trang Douyin
+  // (hook request của trang, <video> đang phát, hoặc script của trang) nên
+  // có session và chữ ký của user, khác hẳn fetch từ service worker. Hỏi
+  // không được (tab không phải Douyin, content script chưa sẵn, video blob
+  // mà chưa có dữ liệu hook) thì trả null để rơi xuống các đường sau.
+  // Nếu user đã dán một link khác với video đang xem thì không dùng kết
+  // quả bắt từ trang, tránh tải nhầm video.
+  async function tryPageCapture(parsed, tabId) {
+    if (!Number.isInteger(tabId)) return null;
+    let response = null;
+    try {
+      response = await Promise.race([
+        chrome.tabs.sendMessage(tabId, {
+          type: msg.types.DOUYIN_PAGE_CAPTURE,
+          payload: {},
+          requestId: msg.nextRequestId("douyin-page")
+        }),
+        new Promise(resolve => setTimeout(() => resolve(null), 5000))
+      ]);
+    } catch {
+      return null;
+    }
+    if (!msg.isResponse(response) || !response.ok) return null;
+    const captured = response.data;
+    if (!captured || !Array.isArray(captured.medias) || !captured.medias.length) return null;
+    if (parsed?.videoId && captured.videoId && parsed.videoId !== captured.videoId) return null;
+    const rows = rowsFrom(captured.medias);
+    const available = rows.filter(row => row.available);
+    if (!available.length) return null;
+    return {
+      platform: "douyin",
+      videoId: captured.videoId || parsed?.videoId || null,
+      title: captured.title,
+      cover: captured.cover,
+      duration: captured.duration ?? null,
+      rows,
+      availableCount: available.length,
+      defaultVariant: available[0].key,
+      source: "page",
+      provider: "Douyin (trang đang xem)",
+      resolvedAt: Date.now()
+    };
+  }
+
   async function analyze(payload = {}) {
-    let parsed = validation.parseDouyinUrl(payload.url);
-    if (!parsed.ok) return fail(parsed.code, messageFor(parsed.code));
-    parsed = await resolveShortLink(parsed);
+    // Ô trống (popup gửi khi bấm "Dùng video đang xem" trên tab Douyin mà
+    // không có canonicalUrl): bỏ qua bước parse, chỉ thử bắt từ trang.
+    let parsed = null;
+    if (payload.url && String(payload.url).trim()) {
+      const initial = validation.parseDouyinUrl(payload.url);
+      if (!initial.ok) return fail(initial.code, messageFor(initial.code));
+      parsed = await resolveShortLink(initial);
+    }
+
+    const pageData = await tryPageCapture(parsed, payload.tabId);
+    if (pageData) return msg.ok(pageData);
+    if (!parsed) {
+      return fail("INVALID_URL", "Hãy mở một video Douyin trên tab đang xem rồi bấm Phân tích, hoặc dán link Douyin.");
+    }
 
     const nativeData = await tryNative(parsed);
     if (nativeData) return msg.ok(nativeData);
@@ -319,7 +374,9 @@
 
   async function download(payload = {}) {
     // analyze dùng cache theo URL + cấu hình và kiểm tra TTL cả khi bấm tải.
-    const resolved = await analyze({ url: payload.url });
+    // Giữ tabId để lần phân tích lại khi bấm tải vẫn bắt được từ trang đang
+    // xem trong trường hợp lần đầu bắt bằng đường trang (ô URL trống).
+    const resolved = await analyze({ url: payload.url, tabId: payload.tabId });
     if (!resolved.ok) return resolved;
     const entry = resolved.data;
     const row = entry.rows.find(item => item.key === payload.variant)

@@ -198,7 +198,10 @@
     el.mirror.textContent = data?.mirrored ? "Khôi phục chiều gốc" : "Lật video đang xem";
     el.capture.disabled = !available;
     setControlsEnabled(true);
-    el.useCurrent.hidden = !data?.canonicalUrl;
+    // Douyin feed/modal không có canonicalUrl (videoId không nằm trong
+    // pathname) nhưng vẫn bắt được link từ trang đang xem, nên vẫn hiện nút.
+    const isDouyinTab = ns.validation.isDouyinUrl(data?.url || "");
+    el.useCurrent.hidden = !data?.canonicalUrl && !(isDouyinTab && data?.available);
     if (data?.canonicalUrl && !el.url.value && el.url.dataset.touched !== "1") {
       el.url.value = data.canonicalUrl;
     }
@@ -546,8 +549,13 @@
   async function analyze() {
     if (el.analyze.disabled) return;
     const url = el.url.value.trim();
-    const isDouyin = ns.validation.isDouyinUrl(url);
-    if (!url) {
+    // Ô trống trên tab Douyin nghĩa là bắt link video đang xem từ chính trang
+    // (background sẽ hỏi content script trước, rồi mới fallback sang native
+    // và Seekin); các trường hợp khác vẫn bắt buộc phải dán link.
+    const isDouyin = url
+      ? ns.validation.isDouyinUrl(url)
+      : ns.validation.isDouyinUrl(status?.url || "");
+    if (!url && !isDouyin) {
       showError("Hãy dán URL TikTok hoặc Douyin trước khi phân tích.");
       return;
     }
@@ -556,7 +564,7 @@
     el.downloadResult.hidden = true;
     el.downloadNote.hidden = false;
     el.downloadNote.textContent = isDouyin
-      ? "Đang phân tích Douyin qua dịch vụ tải…"
+      ? (url ? "Đang phân tích Douyin…" : "Đang bắt link video Douyin đang xem…")
       : "Đang lấy liên kết tải từ TikWM…";
     el.downloadProgress.hidden = true;
     el.analyze.disabled = true;
@@ -627,11 +635,20 @@
     }
   });
   el.useCurrent.addEventListener("click", () => {
-    if (!status?.canonicalUrl) return;
-    invalidateAnalysis();
-    el.url.value = status.canonicalUrl;
-    el.url.dataset.touched = "1";
-    analyze();
+    if (status?.canonicalUrl) {
+      invalidateAnalysis();
+      el.url.value = status.canonicalUrl;
+      el.url.dataset.touched = "1";
+      analyze();
+      return;
+    }
+    // Tab Douyin không có canonicalUrl (feed/modal): phân tích với ô trống
+    // để background bắt link từ trang đang xem.
+    if (status?.available && ns.validation.isDouyinUrl(status?.url || "")) {
+      invalidateAnalysis();
+      el.url.value = "";
+      analyze();
+    }
   });
 
   el.eq.addEventListener("change", async () => {

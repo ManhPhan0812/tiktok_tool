@@ -74,7 +74,21 @@
   }
 
   function videoId() {
-    return ns.platform.videoIdFromPath(location.pathname);
+    // Douyin mở video bằng modal (?modal_id=) hoặc trang feed mà pathname
+    // không chứa /video/<id>; trước đây những trường hợp đó luôn trả null
+    // nên popup không tự điền link đang xem.
+    const fromPath = ns.platform.videoIdFromPath(location.pathname);
+    if (fromPath) return fromPath;
+    try {
+      const params = new URLSearchParams(location.search || "");
+      for (const key of ["modal_id", "aweme_id", "item_id"]) {
+        const value = params.get(key);
+        if (/^\d{6,25}$/.test(value || "")) return value;
+      }
+    } catch {
+      // location.search lỗi thì giữ null như cũ.
+    }
+    return null;
   }
 
   function author() {

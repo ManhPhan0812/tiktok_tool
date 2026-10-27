@@ -222,6 +222,20 @@
         }
         return true;
       }
+      case types.DOUYIN_PAGE_CAPTURE: {
+        // Chỉ Douyin mới có đường bắt từ trang; TikTok vẫn dùng RESOLVE_VIDEO.
+        if (ns.platform.current().id !== "douyin") {
+          sendResponse(msg.fail("UNSUPPORTED_PLATFORM", "Trang này không phải Douyin."));
+          return true;
+        }
+        const captured = ns.douyinPage ? ns.douyinPage.capture(activeVideo) : null;
+        if (!captured) {
+          sendResponse(msg.fail("NO_SOURCE", "Không bắt được link từ trang đang xem: video có thể đang phát bằng blob/MSE và trang chưa trả dữ liệu video qua request nào. Hãy thử dán link rồi phân tích."));
+        } else {
+          sendResponse(msg.ok({ ...captured, pageVideoId: player.videoId(), pageUrl: location.href }));
+        }
+        return true;
+      }
       case types.CAPTURE_FRAME:
         captureFrame(payload)
           .then(result => sendResponse(msg.ok(result)))
