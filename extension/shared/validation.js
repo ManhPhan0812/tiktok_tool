@@ -7,7 +7,11 @@
   const sharePath = /^\/t\/[a-z0-9_-]+\/?$/i;
   const shortHosts = new Set(["vm.tiktok.com", "vt.tiktok.com"]);
   const tiktokHost = /^(?:[a-z0-9-]+\.)*tiktok\.com$/;
-  const douyinHost = /^(?:[a-z0-9-]+\.)*douyin\.com$/;
+  // iesdouyin.com là host share chính thức của Douyin (dạng
+  // https://www.iesdouyin.com/share/video/<id>/). Trước đây isDouyinUrl() không
+  // nhận host này nên popup rơi vào luồng TikTok và báo UNSUPPORTED_PLATFORM,
+  // dù parseDouyinUrl() vẫn xử lý được link đó.
+  const douyinHost = /^(?:[a-z0-9-]+\.)*(?:douyin|iesdouyin)\.com$/;
   // Nguồn duy nhất cho danh sách host: `shared/platform.js` đọc bảng này để dựng
   // hồ sơ nền tảng, nên thêm nền tảng mới chỉ cần thêm một dòng ở đây.
   const hostPatterns = Object.freeze({ tiktok: tiktokHost, douyin: douyinHost });
@@ -185,3 +189,4 @@
     formatBytes
   });
 })();
+

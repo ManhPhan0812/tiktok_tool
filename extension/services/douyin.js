@@ -13,6 +13,7 @@
   const CACHE_TTL = 60_000;
 
   const cache = new Map();
+  const nativeCache = new Map();
 
   function fail(code, message) {
     return msg.fail(code, message);
@@ -51,19 +52,61 @@
 
   // Chấp nhận ba dạng máy chủ hay trả: { code, data: { medias } }, { data: { medias } }
   // và mảng media trần. Không đoán bừa: không khớp dạng nào thì báo lỗi rõ ràng.
+  // Thêm dạng dự phòng cho máy chủ thật (không phải stub test): một link tải duy
+  // nhất, hoặc một mảng URL trần. Link trỏ lại trang Douyin/TikTok (máy chủ echo
+  // lại link gốc) không được tính là link tải, để không tạo lựa chọn giả.
+  function isPageUrl(value) {
+    try {
+      const host = new URL(value).hostname.toLowerCase();
+      return /(^|\.)(douyin|iesdouyin|tiktok)\.com$/.test(host);
+    } catch {
+      return true;
+    }
+  }
+
   function extract(payload) {
     if (!payload || typeof payload !== "object") return null;
     if (Array.isArray(payload)) return { title: null, cover: null, medias: payload };
     const data = payload.data && typeof payload.data === "object" ? payload.data : payload;
     const medias = data.medias || data.media || data.videos || data.items || data.list;
-    if (!Array.isArray(medias)) return null;
-    return {
-      title: data.title || data.desc || null,
-      cover: data.imageUrl || data.cover || data.image || null,
-      duration: data.duration ?? null,
-      hdLifetime: data.hdLifetime ?? null,
-      medias
-    };
+    if (Array.isArray(medias)) {
+      return {
+        title: data.title || data.desc || null,
+        cover: data.imageUrl || data.cover || data.image || null,
+        duration: data.duration ?? null,
+        hdLifetime: data.hdLifetime ?? null,
+        medias
+      };
+    }
+    const single = [data.downloadUrl, data.download_url, data.videoUrl, data.video_url,
+      data.playUrl, data.play_url, data.url]
+      .find(value => typeof value === "string" && /^https:\/\//i.test(value.trim()) && !isPageUrl(value.trim()));
+    if (single) {
+      return {
+        title: data.title || data.desc || null,
+        cover: data.imageUrl || data.cover || data.image || null,
+        duration: data.duration ?? null,
+        hdLifetime: data.hdLifetime ?? null,
+        medias: [{
+          url: single.trim(),
+          quality: data.quality || data.label || "video",
+          fileSize: data.fileSize || data.sizeBytes || data.dataSize || 0
+        }]
+      };
+    }
+    const urls = Array.isArray(data.urls)
+      ? data.urls.filter(value => typeof value === "string" && /^https:\/\//i.test(value.trim()) && !isPageUrl(value.trim()))
+      : [];
+    if (urls.length) {
+      return {
+        title: data.title || data.desc || null,
+        cover: data.imageUrl || data.cover || data.image || null,
+        duration: data.duration ?? null,
+        hdLifetime: data.hdLifetime ?? null,
+        medias: urls.map(url => ({ url: url.trim(), quality: "video" }))
+      };
+    }
+    return null;
   }
 
   function rowsFrom(medias) {
@@ -112,9 +155,67 @@
     }
   }
 
+  // Link rút gọn v.douyin.com/<mã> là dạng copy từ app hay gặp nhất, nhưng nó
+  // không chứa videoId. Trước đây code gửi nguyên link rút gọn cho Seekin và
+  // trông chờ máy chủ tự theo redirect — chưa được kiểm chứng. Nay extension
+  // tự giải redirect trước (cần host_permissions cho v.douyin.com trong
+  // manifest.json): lấy URL cuối rồi mới gửi cho máy chủ. Giải không được thì
+  // giữ nguyên link rút gọn như cũ, không hỏng thêm trường hợp nào.
+  async function resolveShortLink(parsed) {
+    if (!parsed.short) return parsed;
+    try {
+      const response = await fetch(parsed.url, { credentials: "omit" });
+      const resolved = validation.parseDouyinUrl(response.url);
+      if (resolved.ok && resolved.videoId) return resolved;
+    } catch {
+      // Giữ link rút gọn cho máy chủ tự xử lý.
+    }
+    return parsed;
+  }
+
+  // Thử lấy thẳng từ Douyin trước (douyin-native.js). Thất bại thì rơi xuống
+  // Seekin như cũ, không báo lỗi ở đây: link native có thể bị captcha chặn
+  // trong khi Seekin vẫn phân tích được, và ngược lại. Chỉ cache kết quả
+  // native thành công, để lần sau vẫn thử lại khi native từng thất bại.
+  async function tryNative(parsed) {
+    if (!parsed.videoId || !ns.douyinNative) return null;
+    const key = `native:${parsed.videoId}`;
+    const cached = nativeCache.get(key);
+    if (cached && Date.now() - cached.at < CACHE_TTL) return cached.data;
+    let native = null;
+    try {
+      native = await ns.douyinNative.resolveNative(parsed);
+    } catch {
+      native = null;
+    }
+    if (!native?.ok || !Array.isArray(native.medias)) return null;
+    const rows = rowsFrom(native.medias);
+    const available = rows.filter(row => row.available);
+    if (!available.length) return null;
+    const data = {
+      platform: "douyin",
+      videoId: parsed.videoId,
+      title: native.title,
+      cover: native.cover,
+      duration: native.duration ?? null,
+      rows,
+      availableCount: available.length,
+      defaultVariant: available[0].key,
+      source: "native",
+      provider: "Douyin",
+      resolvedAt: Date.now()
+    };
+    nativeCache.set(key, { at: Date.now(), data });
+    return data;
+  }
+
   async function analyze(payload = {}) {
-    const parsed = validation.parseDouyinUrl(payload.url);
+    let parsed = validation.parseDouyinUrl(payload.url);
     if (!parsed.ok) return fail(parsed.code, messageFor(parsed.code));
+    parsed = await resolveShortLink(parsed);
+
+    const nativeData = await tryNative(parsed);
+    if (nativeData) return msg.ok(nativeData);
 
     const { endpoint, token } = await config();
     const cacheKey = JSON.stringify([endpoint, token, parsed.videoId || parsed.url]);
@@ -242,6 +343,7 @@
 
   function clearCache() {
     cache.clear();
+    nativeCache.clear();
   }
 
   ns.douyinService = Object.freeze({
@@ -255,3 +357,4 @@
     TOKEN_KEY
   });
 })();
+
