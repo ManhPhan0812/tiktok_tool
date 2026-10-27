@@ -255,6 +255,99 @@
     };
   }
 
+  // API Douyin tự host của người dùng (services/localapi.js): POST
+  // /douyin/detail với detail_id, trả link play trực tiếp + nhạc. Chỉ
+  // chạy khi người dùng đã đặt douyinLocalBase trong storage; chưa đặt
+  // thì trả null để luồng cũ chạy y như trước. Lỗi thiếu quyền host thì
+  // báo thẳng (fatal) để popup xin quyền theo origin rồi thử lại, giống
+  // đường endpoint riêng; lỗi mạng/upstream thì không fatal để còn rơi
+  // xuống native/ttget, tránh việc VPS tắt là mất luôn đường tải.
+  function localErrorFor(reason) {
+    switch (reason) {
+      case "TIMEOUT":
+        return fail("TIMEOUT", "API Douyin tự host phản hồi quá lâu. Hãy thử lại.");
+      case "NON_JSON":
+        return fail("UPSTREAM", "API Douyin tự host trả dữ liệu không phải JSON.");
+      case "NO_DOWNLOADS":
+        return fail("NO_SOURCE", "API Douyin tự host không trả link tải cho video này.");
+      default:
+        if (typeof reason === "string" && reason.startsWith("HTTP_")) {
+          return fail("UPSTREAM", `API Douyin tự host trả HTTP ${reason.slice(5)}. Kiểm tra lại token trong storage (douyinLocalToken) rồi thử lại.`);
+        }
+        return fail("UPSTREAM", "Không gọi được API Douyin tự host. Hãy thử lại.");
+    }
+  }
+
+  // Khác originOf của đường endpoint riêng (chỉ nhận https): API tự host
+  // thường chạy http trên localhost hoặc VPS nên phải chấp nhận cả http.
+  function originOfLocal(base) {
+    try {
+      const url = new URL(base);
+      return (url.protocol === "http:" || url.protocol === "https:")
+        ? `${url.protocol}//${url.host}`
+        : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function tryLocal(parsed) {
+    if (!parsed?.videoId || !ns.localApiService) return null;
+    const { base, token } = await ns.localApiService.storedConfig();
+    if (!base) return null;
+    const origin = originOfLocal(base);
+    if (!origin) {
+      return {
+        ok: false,
+        fatal: true,
+        error: fail("NOT_CONFIGURED", "douyinLocalBase phải là URL http(s) hợp lệ, ví dụ http://127.0.0.1:5556.")
+      };
+    }
+    if (!(await permittedFor(origin))) {
+      return {
+        ok: false,
+        fatal: true,
+        error: {
+          ok: false,
+          error: {
+            code: "PERMISSION_REQUIRED",
+            message: `Cần cấp quyền truy cập ${origin} để gọi API Douyin tự host.`,
+            origin
+          }
+        }
+      };
+    }
+    let result = null;
+    try {
+      // Truyền lại cấu hình vừa đọc để resolve không đọc storage lần nữa.
+      result = await ns.localApiService.resolve(parsed.videoId, undefined, { base, token });
+    } catch {
+      return { ok: false, fatal: false, error: localErrorFor("FETCH_FAILED") };
+    }
+    if (!result?.ok) return { ok: false, fatal: false, error: localErrorFor(result?.reason) };
+    const rows = rowsFrom(result.medias);
+    const available = rows.filter(row => row.available);
+    if (!available.length) {
+      return { ok: false, fatal: false, error: fail("NO_SOURCE", "API Douyin tự host không trả bản tải được cho video này.") };
+    }
+    return {
+      ok: true,
+      data: {
+        platform: "douyin",
+        videoId: parsed.videoId,
+        title: result.title,
+        cover: result.cover,
+        duration: result.duration ?? null,
+        rows,
+        availableCount: available.length,
+        defaultVariant: available[0].key,
+        source: "local",
+        provider: new URL(base).host,
+        resolvedAt: Date.now()
+      }
+    };
+  }
+
   async function analyze(payload = {}) {
     // Ô trống (popup gửi khi bấm "Dùng video đang xem" trên tab Douyin mà
     // không có canonicalUrl): bỏ qua bước parse, chỉ thử bắt từ trang.
@@ -271,10 +364,18 @@
       return fail("INVALID_URL", "Hãy mở một video Douyin trên tab đang xem rồi bấm Phân tích, hoặc dán link Douyin.");
     }
 
+    // Thứ tự mới: bắt từ trang -> API tự host (nếu đã cấu hình) -> native
+    // -> provider. API tự host lỗi mạng thì rơi tiếp xuống native/ttget;
+    // chỉ lỗi thiếu quyền host hoặc base URL sai mới dừng lại để người
+    // dùng sửa cấu hình hoặc cấp quyền.
+    const localData = await tryLocal(parsed);
+    if (localData?.ok) return msg.ok(localData.data);
+    if (localData?.fatal) return localData.error;
+
     const nativeData = await tryNative(parsed);
     if (nativeData) return msg.ok(nativeData);
 
-    // Thứ tự: bắt từ trang -> native -> provider. Provider mặc định là
+    // Provider mặc định là
     // ttget.com trực tiếp; chỉ khi người dùng đã đặt endpoint riêng thì
     // mới gọi endpoint đó thay cho ttget, và lỗi của nó được trả thẳng
     // (không rơi xuống ttget sau endpoint riêng). Không còn đường Seekin
