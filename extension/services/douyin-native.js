@@ -8,7 +8,7 @@
   //   2. HTML trang video douyin.com/video/<id> (dữ liệu nhúng trong trang).
   // Cả hai đều trả video.play_addr.url_list; bản có watermark chứa "playwm",
   // đổi thành "play" là được bản không watermark. Module này không tự quyết
-  // định fallback: trả ok:false thì caller (douyin.js) rơi xuống Seekin như cũ.
+  // định fallback: trả ok:false thì caller (douyin.js) rơi xuống ttget như cũ.
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
   const REQUEST_TIMEOUT = 15_000;
   const ITEMINFO_URL = "https://www.iesdouyin.com/web/api/v2/aweme/iteminfo/";
@@ -169,7 +169,7 @@
       lastReason = error?.name === "AbortError" ? "ITEMINFO_TIMEOUT" : "ITEMINFO_NETWORK";
     }
     // Nguồn 2: HTML trang video. Nếu trang trả về trang xác minh (captcha) thì
-    // dừng ở đây với lý do rõ ràng, caller vẫn có thể thử Seekin sau đó.
+    // dừng ở đây với lý do rõ ràng, caller vẫn có thể thử ttget sau đó.
     try {
       const response = await fetchWithTimeout(fetchFn, canonical, {
         credentials: "include",

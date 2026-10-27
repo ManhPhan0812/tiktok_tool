@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "TikTok Tools",
   "version": "0.0.3",
-  "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình trên TikTok và Douyin; tải TikTok qua TikWM và Douyin trực tiếp từ Douyin, dự phòng qua Seekin và ttget.",
+  "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình trên TikTok và Douyin; tải TikTok qua TikWM và Douyin trực tiếp từ Douyin, dự phòng qua ttget.com.",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -24,7 +24,6 @@
     "https://iesdouyin.com/*",
     "https://tikwm.com/*",
     "https://www.tikwm.com/*",
-    "https://download.seekin.ai/*",
     "https://go.ttget.com/*",
     "https://ttget.com/*",
     "https://dl.ttget.com/*"

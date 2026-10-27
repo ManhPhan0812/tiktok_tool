@@ -6,7 +6,9 @@
   const validation = ns.validation;
 
   // Player có thể dùng DASH/MSE nên không thể lưu blob như một tệp MP4.
-  // Mặc định phân tích qua Seekin; vẫn cho phép endpoint riêng tương thích.
+  // Seekin đã bị xóa khỏi tool: mặc định phân tích trực tiếp qua ttget.com
+  // (services/ttget.js); vẫn cho phép endpoint riêng tương thích nếu người
+  // dùng đã đặt douyinEndpoint trong storage.
   const ENDPOINT_KEY = "douyinEndpoint";
   const TOKEN_KEY = "douyinToken";
   const REQUEST_TIMEOUT = 25_000;
@@ -24,11 +26,11 @@
       const stored = await chrome.storage.local.get([ENDPOINT_KEY, TOKEN_KEY]);
       const customEndpoint = String(stored?.[ENDPOINT_KEY] || "").trim();
       return {
-        endpoint: customEndpoint || ns.seekinService.endpoint,
+        endpoint: customEndpoint,
         token: customEndpoint ? String(stored?.[TOKEN_KEY] || "").trim() : ""
       };
     } catch {
-      return { endpoint: ns.seekinService.endpoint, token: "" };
+      return { endpoint: "", token: "" };
     }
   }
 
@@ -156,7 +158,7 @@
   }
 
   // Link rút gọn v.douyin.com/<mã> là dạng copy từ app hay gặp nhất, nhưng nó
-  // không chứa videoId. Trước đây code gửi nguyên link rút gọn cho Seekin và
+  // không chứa videoId. Trước đây code gửi nguyên link rút gọn cho máy chủ và
   // trông chờ máy chủ tự theo redirect — chưa được kiểm chứng. Nay extension
   // tự giải redirect trước (cần host_permissions cho v.douyin.com trong
   // manifest.json): lấy URL cuối rồi mới gửi cho máy chủ. Giải không được thì
@@ -174,8 +176,8 @@
   }
 
   // Thử lấy thẳng từ Douyin trước (douyin-native.js). Thất bại thì rơi xuống
-  // Seekin như cũ, không báo lỗi ở đây: link native có thể bị captcha chặn
-  // trong khi Seekin vẫn phân tích được, và ngược lại. Chỉ cache kết quả
+  // ttget, không báo lỗi ở đây: link native có thể bị captcha chặn
+  // trong khi ttget vẫn phân tích được, và ngược lại. Chỉ cache kết quả
   // native thành công, để lần sau vẫn thử lại khi native từng thất bại.
   async function tryNative(parsed) {
     if (!parsed.videoId || !ns.douyinNative) return null;
@@ -272,24 +274,25 @@
     const nativeData = await tryNative(parsed);
     if (nativeData) return msg.ok(nativeData);
 
+    // Thứ tự: bắt từ trang -> native -> provider. Provider mặc định là
+    // ttget.com trực tiếp; chỉ khi người dùng đã đặt endpoint riêng thì
+    // mới gọi endpoint đó thay cho ttget, và lỗi của nó được trả thẳng
+    // (không rơi xuống ttget sau endpoint riêng). Không còn đường Seekin
+    // nào trong chuỗi này, nên lỗi 5016 của Seekin không thể xuất hiện nữa.
     const { endpoint, token } = await config();
-    const isSeekin = ns.seekinService.matches(endpoint);
-    const proxy = await tryProxy(parsed, endpoint, token, isSeekin);
-    if (proxy.ok) return msg.ok(proxy.data);
-    // Seekin 5016 trên video thật (ví dụ 7669768092729363764) là trường
-    // hợp ttget sinh ra để cứu: chỉ chạy khi endpoint đang là Seekin mặc
-    // định, không chạy sau endpoint riêng do người dùng đặt. ttget thất
-    // bại thì trả lại đúng lỗi Seekin như cũ, không thay bằng lỗi mới.
-    if (isSeekin) {
-      const ttgetData = await tryTtget(parsed);
-      if (ttgetData) return msg.ok(ttgetData);
+    if (endpoint) {
+      const proxy = await tryProxy(parsed, endpoint, token);
+      if (proxy.ok) return msg.ok(proxy.data);
+      return proxy.error;
     }
-    return proxy.error;
+    const ttget = await tryTtget(parsed);
+    if (ttget.ok) return msg.ok(ttget.data);
+    return ttget.error;
   }
 
-  // Đường máy chủ cấu hình được (mặc định Seekin). Trả { ok, data } hoặc
-  // { ok: false, error } để analyze còn thử đường dự phòng trước khi báo.
-  async function tryProxy(parsed, endpoint, token, isSeekin) {
+  // Đường endpoint riêng do người dùng đặt (không phải Seekin, không ký
+  // HMAC). Trả { ok, data } hoặc { ok: false, error }.
+  async function tryProxy(parsed, endpoint, token) {
     const cacheKey = JSON.stringify([endpoint, token, parsed.videoId || parsed.url]);
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.at < CACHE_TTL) return { ok: true, data: cached.data };
@@ -316,7 +319,6 @@
     let text;
     try {
       const body = JSON.stringify({ url: parsed.url });
-      const signedHeaders = isSeekin ? await ns.seekinService.headers(endpoint, body) : {};
       response = await fetch(endpoint, {
         method: "POST",
         signal: controller.signal,
@@ -324,7 +326,6 @@
         headers: {
           "content-type": "application/json",
           accept: "*/*",
-          ...signedHeaders,
           ...(token ? { authorization: token } : {})
         },
         body
@@ -355,10 +356,7 @@
       return { ok: false, error: fail("UPSTREAM", "Máy chủ tải Douyin trả dữ liệu không phải JSON.") };
     }
     if (json?.code && String(json.code) !== "0000") {
-      const hint = isSeekin && String(json.code) === "5016"
-        ? " Seekin chưa phân tích được video này. Hãy thử lại trên seekin.ai hoặc phân tích lại sau."
-        : "";
-      return { ok: false, error: fail("UPSTREAM", `${isSeekin ? "Seekin" : "Máy chủ"} báo lỗi ${json.code}: ${json.msg || json.message || "không rõ lý do"}.${hint}`) };
+      return { ok: false, error: fail("UPSTREAM", `Máy chủ báo lỗi ${json.code}: ${json.msg || json.message || "không rõ lý do"}.`) };
     }
     const extracted = extract(json);
     if (!extracted) {
@@ -380,7 +378,7 @@
       availableCount: available.length,
       defaultVariant: available[0].key,
       source: "proxy",
-      provider: isSeekin ? "Seekin" : new URL(endpoint).hostname,
+      provider: new URL(endpoint).hostname,
       hdLifetime: extracted.hdLifetime,
       resolvedAt: Date.now()
     };
@@ -388,33 +386,58 @@
     return { ok: true, data };
   }
 
-  // Dự phòng ttget (services/ttget.js). Host ttget nằm trong
-  // host_permissions của manifest nên fetch thẳng từ service worker; lỗi
-  // mạng/HTTP/JSON đều trả null để analyze giữ nguyên lỗi Seekin.
+  // Provider trực tiếp ttget.com (services/ttget.js). Host ttget nằm trong
+  // host_permissions của manifest nên fetch thẳng từ service worker.
+  // Lỗi được dịch ra thông điệp rõ ràng thay vì lỗi của provider cũ, vì
+  // ttget hay bị chặn ở cổng kiểm tra bảo mật hơn là trả JSON lỗi.
+  function ttgetErrorFor(reason) {
+    switch (reason) {
+      case "TIMEOUT":
+        return fail("TIMEOUT", "ttget.com phản hồi quá lâu. Hãy thử lại.");
+      case "NON_JSON":
+        return fail("UPSTREAM", "ttget.com trả dữ liệu không phải JSON (có thể là trang kiểm tra bảo mật, cần token tw mới).");
+      case "NO_PAGES":
+        return fail("NO_SOURCE", "ttget.com không trả bản tải cho video này.");
+      default:
+        if (typeof reason === "string" && reason.startsWith("HTTP_")) {
+          return fail("UPSTREAM", `ttget.com chặn yêu cầu (HTTP ${reason.slice(5)}). Có thể cần token tw mới: lưu vào storage ttgetToken rồi thử lại.`);
+        }
+        return fail("UPSTREAM", "Không gọi được ttget.com. Hãy thử lại.");
+    }
+  }
+
   async function tryTtget(parsed) {
-    if (!ns.ttgetService) return null;
+    if (!ns.ttgetService) {
+      return { ok: false, error: fail("UPSTREAM", "Chưa nạp được dịch vụ ttget.com. Hãy tải lại extension.") };
+    }
     let result = null;
     try {
       result = await ns.ttgetService.resolve(parsed.url);
     } catch {
-      return null;
+      return { ok: false, error: ttgetErrorFor("FETCH_FAILED") };
     }
-    if (!result?.ok || !Array.isArray(result.medias)) return null;
+    if (!result?.ok) return { ok: false, error: ttgetErrorFor(result?.reason) };
+    if (!Array.isArray(result.medias)) return { ok: false, error: ttgetErrorFor("NO_PAGES") };
     const rows = rowsFrom(result.medias);
     const available = rows.filter(row => row.available);
-    if (!available.length) return null;
+    if (!available.length) {
+      return { ok: false, error: fail("NO_SOURCE", "ttget.com không trả bản tải được cho video này.") };
+    }
     return {
-      platform: "douyin",
-      videoId: parsed.videoId || null,
-      title: result.title,
-      cover: result.cover,
-      duration: result.duration ?? null,
-      rows,
-      availableCount: available.length,
-      defaultVariant: available[0].key,
-      source: "ttget",
-      provider: "ttget.com",
-      resolvedAt: Date.now()
+      ok: true,
+      data: {
+        platform: "douyin",
+        videoId: parsed.videoId || null,
+        title: result.title,
+        cover: result.cover,
+        duration: result.duration ?? null,
+        rows,
+        availableCount: available.length,
+        defaultVariant: available[0].key,
+        source: "ttget",
+        provider: "ttget.com",
+        resolvedAt: Date.now()
+      }
     };
   }
 

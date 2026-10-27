@@ -2,17 +2,23 @@
   "use strict";
   const ns = globalThis.TikTokTools = globalThis.TikTokTools || {};
 
-  // Dự phòng thứ tư cho Douyin, sau: bắt từ trang đang xem -> native ->
-  // Seekin. API public của ttget.com, quan sát từ network log của trang:
-  // POST form l=<link Douyin> tới go.ttget.com/info, trả
-  // { data: { cover, desc, pages: [[{ type, label, link, link2,
-  // direct_link }, ...]] } }. Không gửi header `tw`: đó là token phiên
-  // của riêng trang ttget trong trình duyệt của người dùng, sẽ hết hạn và
-  // không được hardcode vào extension. Nếu máy chủ bắt buộc có `tw` thì
-  // đường này thất bại và analyze sẽ trả lại lỗi Seekin như cũ (xem
-  // douyin.js); lúc đó mới tính tới chuyện lấy token từ context của
-  // trang ttget.com. Chỉ lấy bản không watermark và bản audio.
+  // Provider trực tiếp cho Douyin (Seekin đã bị xóa): sau bắt từ trang
+  // đang xem -> native, analyze gọi thẳng API này. API public của
+  // ttget.com, quan sát từ network log của trang: POST form l=<link
+  // Douyin> tới go.ttget.com/info, trả { data: { cover, desc, pages:
+  // [[{ type, label, link, link2, direct_link }, ...]] } }. Chỉ lấy bản
+  // không watermark và bản audio.
+  //
+  // Header `tw` là token phiên của riêng trang ttget trong trình duyệt
+  // của người dùng và xoay theo phiên (hai lần bắt network log trong
+  // cùng một ngày đã cho hai giá trị khác nhau), lại nằm trong repo
+  // public, nên KHÔNG hardcode vào code. Extension chỉ gửi `tw` khi
+  // người dùng đã lưu nó vào storage với khóa ttgetToken (ví dụ từ
+  // console của service worker: chrome.storage.local.set({ ttgetToken:
+  // "<token mới>" })); không có token thì gọi như trước, và nếu ttget
+  // đòi token thì douyin.js sẽ báo rõ để người dùng cập nhật.
   const endpoint = "https://go.ttget.com/info";
+  const TOKEN_KEY = "ttgetToken";
   const REQUEST_TIMEOUT = 25_000;
 
   function isTtgetUrl(value) {
@@ -69,7 +75,19 @@
     };
   }
 
-  async function resolve(url, fetchImpl = fetch) {
+  async function storedToken() {
+    try {
+      if (typeof chrome === "undefined" || !chrome.storage?.local) return "";
+      const stored = await chrome.storage.local.get([TOKEN_KEY]);
+      return String(stored?.[TOKEN_KEY] || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  // tokenOverride chỉ dùng cho test; chạy thật thì lấy từ storage.
+  async function resolve(url, fetchImpl = fetch, tokenOverride) {
+    const token = typeof tokenOverride === "string" ? tokenOverride.trim() : await storedToken();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
     try {
@@ -80,8 +98,10 @@
         referrer: "https://ttget.com/",
         headers: {
           accept: "*/*",
+          "accept-language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
           "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-          lang: "vi"
+          lang: "vi",
+          ...(token ? { tw: token } : {})
         },
         body: `l=${encodeURIComponent(url)}`
       });
@@ -102,5 +122,5 @@
     }
   }
 
-  ns.ttgetService = Object.freeze({ endpoint, extract, resolve });
+  ns.ttgetService = Object.freeze({ endpoint, TOKEN_KEY, extract, resolve });
 })();

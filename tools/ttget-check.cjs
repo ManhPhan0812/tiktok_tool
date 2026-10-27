@@ -67,6 +67,18 @@ check("extract: link tro lai trang Douyin bi loai", ttget.extract({ data: { page
     && seen.init.headers.lang === "vi" && !("tw" in seen.init.headers),
     JSON.stringify(seen.init.headers));
   check("resolve: referrer ttget.com", seen.init.referrer === "https://ttget.com/", seen.init.referrer);
+  check("resolve: accept-language uu tien vi", seen.init.headers["accept-language"] === "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
+    seen.init.headers["accept-language"]);
+
+  const seenTw = {};
+  const twFetch = async (url, init) => {
+    seenTw.init = init;
+    return { ok: true, json: async () => sample };
+  };
+  await ttget.resolve("https://www.douyin.com/video/1", twFetch, "TEST_TW_TOKEN");
+  check("resolve: tokenOverride thi gui header tw", seenTw.init.headers.tw === "TEST_TW_TOKEN",
+    JSON.stringify(seenTw.init.headers));
+  check("resolve: khong co token thi khong gui tw", !("tw" in seen.init.headers));
   check("resolve: ok va co medias", result.ok === true && result.medias.length === 3, JSON.stringify(result));
 
   const empty = await ttget.resolve("https://www.douyin.com/video/1", async () => ({ ok: true, json: async () => ({ data: { pages: [] } }) }));

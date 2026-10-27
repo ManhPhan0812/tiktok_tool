@@ -551,7 +551,7 @@
     const url = el.url.value.trim();
     // Ô trống trên tab Douyin nghĩa là bắt link video đang xem từ chính trang
     // (background sẽ hỏi content script trước, rồi mới fallback sang native
-    // và Seekin); các trường hợp khác vẫn bắt buộc phải dán link.
+    // và ttget); các trường hợp khác vẫn bắt buộc phải dán link.
     const isDouyin = url
       ? ns.validation.isDouyinUrl(url)
       : ns.validation.isDouyinUrl(status?.url || "");
