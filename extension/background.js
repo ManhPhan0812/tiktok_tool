@@ -1,5 +1,5 @@
 "use strict";
-importScripts("shared/settings.js", "shared/messages.js", "shared/validation.js", "shared/platform.js", "services/proxy.js", "services/downloads.js", "services/seekin.js", "services/douyin-native.js", "services/douyin.js");
+importScripts("shared/settings.js", "shared/messages.js", "shared/validation.js", "shared/platform.js", "services/proxy.js", "services/downloads.js", "services/seekin.js", "services/ttget.js", "services/douyin-native.js", "services/douyin.js");
 
 const ns = TikTokTools;
 const msg = ns.messages;

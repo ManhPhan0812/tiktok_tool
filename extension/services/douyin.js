@@ -273,21 +273,40 @@
     if (nativeData) return msg.ok(nativeData);
 
     const { endpoint, token } = await config();
+    const isSeekin = ns.seekinService.matches(endpoint);
+    const proxy = await tryProxy(parsed, endpoint, token, isSeekin);
+    if (proxy.ok) return msg.ok(proxy.data);
+    // Seekin 5016 trên video thật (ví dụ 7669768092729363764) là trường
+    // hợp ttget sinh ra để cứu: chỉ chạy khi endpoint đang là Seekin mặc
+    // định, không chạy sau endpoint riêng do người dùng đặt. ttget thất
+    // bại thì trả lại đúng lỗi Seekin như cũ, không thay bằng lỗi mới.
+    if (isSeekin) {
+      const ttgetData = await tryTtget(parsed);
+      if (ttgetData) return msg.ok(ttgetData);
+    }
+    return proxy.error;
+  }
+
+  // Đường máy chủ cấu hình được (mặc định Seekin). Trả { ok, data } hoặc
+  // { ok: false, error } để analyze còn thử đường dự phòng trước khi báo.
+  async function tryProxy(parsed, endpoint, token, isSeekin) {
     const cacheKey = JSON.stringify([endpoint, token, parsed.videoId || parsed.url]);
     const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.at < CACHE_TTL) return msg.ok(cached.data);
-    const isSeekin = ns.seekinService.matches(endpoint);
+    if (cached && Date.now() - cached.at < CACHE_TTL) return { ok: true, data: cached.data };
     const origin = originOf(endpoint);
     if (!origin) {
-      return fail("NOT_CONFIGURED", "douyinEndpoint phải là URL https hợp lệ, ví dụ https://your-host.example/media/download.");
+      return { ok: false, error: fail("NOT_CONFIGURED", "douyinEndpoint phải là URL https hợp lệ, ví dụ https://your-host.example/media/download.") };
     }
     if (!(await permittedFor(origin))) {
       return {
         ok: false,
         error: {
-          code: "PERMISSION_REQUIRED",
-          message: `Cần cấp quyền truy cập ${origin} để gọi máy chủ tải Douyin.`,
-          origin
+          ok: false,
+          error: {
+            code: "PERMISSION_REQUIRED",
+            message: `Cần cấp quyền truy cập ${origin} để gọi máy chủ tải Douyin.`,
+            origin
+          }
         }
       };
     }
@@ -313,38 +332,41 @@
       text = await response.text();
     } catch (error) {
       const aborted = error?.name === "AbortError";
-      return fail(
-        aborted ? "TIMEOUT" : "UPSTREAM",
-        aborted
-          ? "Máy chủ tải Douyin phản hồi quá lâu. Hãy thử lại."
-          : `Không gọi được máy chủ tải Douyin: ${String(error?.message || error).slice(0, 120)}`
-      );
+      return {
+        ok: false,
+        error: fail(
+          aborted ? "TIMEOUT" : "UPSTREAM",
+          aborted
+            ? "Máy chủ tải Douyin phản hồi quá lâu. Hãy thử lại."
+            : `Không gọi được máy chủ tải Douyin: ${String(error?.message || error).slice(0, 120)}`
+        )
+      };
     } finally {
       clearTimeout(timer);
     }
 
     if (!response.ok) {
-      return fail("UPSTREAM", `Máy chủ tải Douyin trả HTTP ${response.status}.`);
+      return { ok: false, error: fail("UPSTREAM", `Máy chủ tải Douyin trả HTTP ${response.status}.`) };
     }
     let json;
     try {
       json = JSON.parse(text);
     } catch {
-      return fail("UPSTREAM", "Máy chủ tải Douyin trả dữ liệu không phải JSON.");
+      return { ok: false, error: fail("UPSTREAM", "Máy chủ tải Douyin trả dữ liệu không phải JSON.") };
     }
     if (json?.code && String(json.code) !== "0000") {
       const hint = isSeekin && String(json.code) === "5016"
         ? " Seekin chưa phân tích được video này. Hãy thử lại trên seekin.ai hoặc phân tích lại sau."
         : "";
-      return fail("UPSTREAM", `${isSeekin ? "Seekin" : "Máy chủ"} báo lỗi ${json.code}: ${json.msg || json.message || "không rõ lý do"}.${hint}`);
+      return { ok: false, error: fail("UPSTREAM", `${isSeekin ? "Seekin" : "Máy chủ"} báo lỗi ${json.code}: ${json.msg || json.message || "không rõ lý do"}.${hint}`) };
     }
     const extracted = extract(json);
     if (!extracted) {
-      return fail("UPSTREAM", "Máy chủ trả JSON nhưng không có danh sách bản tải (medias).");
+      return { ok: false, error: fail("UPSTREAM", "Máy chủ trả JSON nhưng không có danh sách bản tải (medias).") };
     }
     const rows = rowsFrom(extracted.medias);
     if (!rows.some(row => row.available)) {
-      return fail("NO_SOURCE", "Máy chủ không trả bản tải được cho video này (mọi bản đều khoá hoặc thiếu link).");
+      return { ok: false, error: fail("NO_SOURCE", "Máy chủ không trả bản tải được cho video này (mọi bản đều khoá hoặc thiếu link).") };
     }
 
     const available = rows.filter(row => row.available);
@@ -363,13 +385,45 @@
       resolvedAt: Date.now()
     };
     cache.set(cacheKey, { at: Date.now(), data });
-    return msg.ok(data);
+    return { ok: true, data };
+  }
+
+  // Dự phòng ttget (services/ttget.js). Host ttget nằm trong
+  // host_permissions của manifest nên fetch thẳng từ service worker; lỗi
+  // mạng/HTTP/JSON đều trả null để analyze giữ nguyên lỗi Seekin.
+  async function tryTtget(parsed) {
+    if (!ns.ttgetService) return null;
+    let result = null;
+    try {
+      result = await ns.ttgetService.resolve(parsed.url);
+    } catch {
+      return null;
+    }
+    if (!result?.ok || !Array.isArray(result.medias)) return null;
+    const rows = rowsFrom(result.medias);
+    const available = rows.filter(row => row.available);
+    if (!available.length) return null;
+    return {
+      platform: "douyin",
+      videoId: parsed.videoId || null,
+      title: result.title,
+      cover: result.cover,
+      duration: result.duration ?? null,
+      rows,
+      availableCount: available.length,
+      defaultVariant: available[0].key,
+      source: "ttget",
+      provider: "ttget.com",
+      resolvedAt: Date.now()
+    };
   }
 
   function fileNameFor(data, row) {
     const id = validation.sanitizeFileName(data.videoId || "video", "video");
     const quality = validation.sanitizeFileName(row.quality || row.label || "video", "video");
-    return `Douyin/${id}_${quality}.mp4`;
+    // Bản audio của ttget là file âm thanh, không phải MP4.
+    const ext = /audio/i.test(row.quality || row.label || "") ? "mp3" : "mp4";
+    return `Douyin/${id}_${quality}.${ext}`;
   }
 
   async function download(payload = {}) {
