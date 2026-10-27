@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TikTok Tools",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Lật video, đổi tốc độ, ẩn lớp thông tin, phát nền, chụp khung hình trên TikTok và Douyin; tải TikTok qua TikWM và Douyin trực tiếp từ Douyin, dự phòng qua ttget.com, hoặc qua API Douyin tự host nếu người dùng cấu hình.",
   "minimum_chrome_version": "116",
   "permissions": [
