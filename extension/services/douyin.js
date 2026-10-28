@@ -348,6 +348,25 @@
     };
   }
 
+  // Gắn dòng chẩn đoán của API tự host vào lỗi cuối cùng, để lần sau
+  // popup hiện rõ là API đã chạy và lỗi gì, thay vì chỉ thấy lỗi của
+  // ttget. localError ở đây là response lỗi nguyên vẹn của tryLocal
+  // (dạng { ok: false, error: { code, message } }). Chỉ gắn khi có
+  // lỗi local thật; không có lỗi local thì trả nguyên lỗi cuối như cũ.
+  // Thông điệp local không chứa giá trị base hay token nên gắn vào đây
+  // không lộ bí mật.
+  function withLocalNote(error, localError) {
+    const note = localError?.error?.message;
+    if (!note || !error || error.ok) return error;
+    return {
+      ...error,
+      error: {
+        ...error.error,
+        message: `${error.error.message} API tự host cũng đã thử và lỗi: ${note}`
+      }
+    };
+  }
+
   async function analyze(payload = {}) {
     // Ô trống (popup gửi khi bấm "Dùng video đang xem" trên tab Douyin mà
     // không có canonicalUrl): bỏ qua bước parse, chỉ thử bắt từ trang.
@@ -367,10 +386,14 @@
     // Thứ tự mới: bắt từ trang -> API tự host (nếu đã cấu hình) -> native
     // -> provider. API tự host lỗi mạng thì rơi tiếp xuống native/ttget;
     // chỉ lỗi thiếu quyền host hoặc base URL sai mới dừng lại để người
-    // dùng sửa cấu hình hoặc cấp quyền.
+    // dùng sửa cấu hình hoặc cấp quyền. Lỗi không-fatal của API tự host
+    // được giữ lại: nếu bước cuối cũng thất bại, dòng lỗi đó được gắn
+    // thêm vào thông báo cuối để lần sau không phải đoán là API đã
+    // chạy hay chưa (chẩn đoán, không đổi thứ tự rơi xuống).
     const localData = await tryLocal(parsed);
     if (localData?.ok) return msg.ok(localData.data);
     if (localData?.fatal) return localData.error;
+    const localError = localData?.error || null;
 
     const nativeData = await tryNative(parsed);
     if (nativeData) return msg.ok(nativeData);
@@ -384,11 +407,11 @@
     if (endpoint) {
       const proxy = await tryProxy(parsed, endpoint, token);
       if (proxy.ok) return msg.ok(proxy.data);
-      return proxy.error;
+      return withLocalNote(proxy.error, localError);
     }
     const ttget = await tryTtget(parsed);
     if (ttget.ok) return msg.ok(ttget.data);
-    return ttget.error;
+    return withLocalNote(ttget.error, localError);
   }
 
   // Đường endpoint riêng do người dùng đặt (không phải Seekin, không ký
